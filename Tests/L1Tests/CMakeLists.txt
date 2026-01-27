@@ -67,7 +67,7 @@ set (TEST_INC ../../helpers)
 #                       "${PLUGIN_NAME_LIB}")
 #
 # NOTE: Alternatively test can choose to update `TEST_SRC`, `TEST_INC` & `TEST_LIB`
-#       directly (like in the case of Miracast)
+#       directly
 #########################################################################################
 macro(add_plugin_test_ex plugin_opt plugin_test_sources_str plugin_includes_str plugin_libs_str)
     # Check if the plugin option is enabled
@@ -106,14 +106,8 @@ macro(add_plugin_test plugin_name test_files)
     add_plugin_test_ex(${plugin_opt} "${test_files}" "../../${plugin_name}" "${NAMESPACE}${plugin_name}")
 endmacro()
 
-# PLUGIN_MIRACAST
-set (MIRACAST_INC ${CMAKE_SOURCE_DIR}/../entservices-casting/Miracast/MiracastPlayer ${CMAKE_SOURCE_DIR}/../entservices-casting/Miracast/MiracastPlayer/RTSP ${CMAKE_SOURCE_DIR}/../entservices-casting/Miracast/MiracastService ${CMAKE_SOURCE_DIR}/../entservices-casting/Miracast/MiracastService/P2P ${CMAKE_SOURCE_DIR}/../entservices-casting/Miracast/common ${CMAKE_SOURCE_DIR}/../entservices-casting/helpers)
-set (MIRACAST_LIBS ${NAMESPACE}MiracastPlayer ${NAMESPACE}MiracastService ${NAMESPACE}MiracastServiceImplementation ${NAMESPACE}MiracastPlayerImplementation)
-set (MIRACAST_SRC tests/test_MiracastService.cpp tests/test_MiracastPlayer.cpp)
-add_plugin_test_ex(PLUGIN_MIRACAST "${MIRACAST_SRC}" "${MIRACAST_INC}" "${MIRACAST_LIBS}")
-
 # PLUGIN_XCAST
-set (XCAST_INC ${CMAKE_SOURCE_DIR}/../entservices-casting/XCast ${CMAKE_SOURCE_DIR}/../entservices-casting/helpers)
+set (XCAST_INC ${CMAKE_SOURCE_DIR}/../entservices-xcast/XCast ${CMAKE_SOURCE_DIR}/../entservices-xcast/helpers)
 set (XCAST_LIBS ${NAMESPACE}XCast ${NAMESPACE}XCastImplementation)
 add_plugin_test_ex(PLUGIN_XCAST tests/test_XCast.cpp "${XCAST_INC}" "${XCAST_LIBS}")
 

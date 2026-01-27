@@ -126,18 +126,18 @@ jobs:
           ref: develop
           token: ${{ secrets.RDKCM_RDKE }}
 
-      - name: Checkout entservices-casting
+      - name: Checkout entservices-xcast
         if: ${{ inputs.caller_source == 'local' }}
         uses: actions/checkout@v3
         with:
-          path: entservices-casting
+          path: entservices-xcast
 
-      - name: Checkout entservices-casting-testframework
+      - name: Checkout entservices-xcast-testframework
         if: ${{ inputs.caller_source == 'testframework' }}
         uses: actions/checkout@v3
         with:
-          repository: rdkcentral/entservices-casting
-          path: entservices-casting
+          repository: rdkcentral/entservices-xcast
+          path: entservices-xcast
           ref: develop
 
       - name: Checkout googletest
@@ -352,7 +352,7 @@ jobs:
           -I $GITHUB_WORKSPACE/entservices-testframework/Tests/headers/ccec/drivers
           -I $GITHUB_WORKSPACE/entservices-testframework/Tests/headers/network
           -I $GITHUB_WORKSPACE/entservices-testframework/Tests
-          -I $GITHUB_WORKSPACE/entservices-casting/helpers
+          -I $GITHUB_WORKSPACE/entservices-xcast/helpers
           -I $GITHUB_WORKSPACE/Thunder/Source
           -I $GITHUB_WORKSPACE/Thunder/Source/core
           -I $GITHUB_WORKSPACE/install/usr/include
@@ -388,11 +388,11 @@ jobs:
           &&
           cmake --install build/mocks
 
-      - name: Build entservices-casting
+      - name: Build entservices-xcast
         run: >
           cmake -G Ninja
-          -S "$GITHUB_WORKSPACE/entservices-casting"
-          -B build/entservices-casting
+          -S "$GITHUB_WORKSPACE/entservices-xcast"
+          -B build/entservices-xcast
           -DCMAKE_INSTALL_PREFIX="$GITHUB_WORKSPACE/install/usr"
           -DCMAKE_MODULE_PATH="$GITHUB_WORKSPACE/install/tools/cmake"
           -DCMAKE_CXX_FLAGS="
@@ -454,12 +454,11 @@ jobs:
           -DRDK_SERVICES_L1_TEST=ON
           -DUSE_THUNDER_R4=ON
           -DHIDE_NON_EXTERNAL_SYMBOLS=OFF
-          -DPLUGIN_MIRACAST=ON
           -DPLUGIN_XCAST=ON
           &&
-          cmake --build build/entservices-casting -j8
+          cmake --build build/entservices-xcast -j8
           &&
-          cmake --install build/entservices-casting
+          cmake --install build/entservices-xcast
 
       - name: Build entservices-testframework
         run: >
@@ -484,7 +483,7 @@ jobs:
           -I $GITHUB_WORKSPACE/entservices-testframework/Tests/headers/rdk/iarmmgrs-hal
           -I $GITHUB_WORKSPACE/entservices-testframework/Tests/headers/ccec/drivers
           -I $GITHUB_WORKSPACE/entservices-testframework/Tests/headers/network
-          -I $GITHUB_WORKSPACE/entservices-casting/helpers
+          -I $GITHUB_WORKSPACE/entservices-xcast/helpers
           -I $GITHUB_WORKSPACE/entservices-testframework/Tests
           -I $GITHUB_WORKSPACE/Thunder/Source
           -I $GITHUB_WORKSPACE/Thunder/Source/core
@@ -526,7 +525,6 @@ jobs:
           -DCMAKE_DISABLE_FIND_PACKAGE_RBus=ON
           -DCMAKE_BUILD_TYPE=Debug
           -DDS_FOUND=ON
-          -DPLUGIN_MIRACAST=ON
           -DPLUGIN_XCAST=ON
           -DRDK_SERVICES_L1_TEST=ON
           -DUSE_THUNDER_R4=ON
@@ -654,12 +652,12 @@ jobs:
           &&
           lcov -c
           -o coverage.info
-          -d build/entservices-casting
+          -d build/entservices-xcast
           &&
           lcov
           -r coverage.info
           '/usr/include/*'
-          '*/build/entservices-casting/_deps/*'
+          '*/build/entservices-xcast/_deps/*'
           '*/install/usr/include/*'
           '*/Tests/headers/*'
           '*/Tests/mocks/*'
@@ -669,14 +667,14 @@ jobs:
           &&
           genhtml
           -o coverage
-          -t "entservices-casting coverage"
+          -t "entservices-xcast coverage"
           filtered_coverage.info
 
       - name: Upload artifacts
         if: ${{ !env.ACT }}
         uses: actions/upload-artifact@v4
         with:
-          name: artifacts-L1-casting
+          name: artifacts-L1-xcast
           path: |
             coverage/
             valgrind_log
