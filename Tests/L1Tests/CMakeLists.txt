@@ -29,10 +29,6 @@ pkg_check_modules(GSTREAMERBASE REQUIRED gstreamer-app-1.0)
 
 find_package(GStreamer REQUIRED)
 
-set (TEST_SRC
-    tests/test_UtilsFile.cpp
-)
-
 set (TEST_LIB
     ${NAMESPACE}Plugins::${NAMESPACE}Plugins
 )
