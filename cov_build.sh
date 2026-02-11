@@ -6,7 +6,7 @@ GITHUB_WORKSPACE="${PWD}"
 ls -la ${GITHUB_WORKSPACE}
 ############################
 # Build entservices-xcast
-echo "buliding entservices-xcast"
+echo "building entservices-xcast"
 
 cd ${GITHUB_WORKSPACE}
 cmake -G Ninja -S "$GITHUB_WORKSPACE" -B build/entservices-xcast \
