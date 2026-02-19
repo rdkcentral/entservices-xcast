@@ -126,6 +126,19 @@ jobs:
           ref: develop
           token: ${{ secrets.RDKCM_RDKE }}
 
+      - name: Checkout networkmanager
+        uses: actions/checkout@v3
+        with:
+          repository: rdkcentral/networkmanager
+          path: networkmanager
+          ref: main
+          fetch-depth: 1
+
+      - name: Copy INetworkManager interface header
+        run: |
+          mkdir -p "$GITHUB_WORKSPACE/install/usr/include/WPEFramework/interfaces"
+          cp "$GITHUB_WORKSPACE/networkmanager/interface/INetworkManager.h" "$GITHUB_WORKSPACE/install/usr/include/WPEFramework/interfaces/"
+
       - name: Checkout entservices-xcast
         if: ${{ inputs.caller_source == 'local' }}
         uses: actions/checkout@v3
@@ -206,12 +219,6 @@ jobs:
           ref: ${{env.INTERFACES_REF}}
           #token : ${{ secrets.RDKCM_RDKE }}
           run: rm -rf $GITHUB_WORKSPACE/entservices-apis/jsonrpc/DTV.json
-
-      - name: Apply patches entservices-apis
-        run: |
-          cd $GITHUB_WORKSPACE/entservices-apis
-          cp -rvf $GITHUB_WORKSPACE/entservices-testframework/interfaceFiles/* $GITHUB_WORKSPACE/entservices-apis/apis/
-          cd -
 
       - name: Build entservices-apis
         run: >
