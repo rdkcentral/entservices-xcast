@@ -215,7 +215,7 @@ namespace WPEFramework
                     {
                         LOGINFO("WiFi State changed: [%d]", state);
                     }
-                    void onWiFiSignalQualityChange(const string ssid, const int strength, const int noise, const int snr , const WiFiSignalQuality quality) override
+                    void onWiFiSignalQualityChange(const string ssid, const int strength, const int noise, const int snr , const Exchange::INetworkManager::WiFiSignalQuality quality) override
                     {
                         // LOGINFO("WiFi Signal Quality changed: SSID [%s] Strength [%s] Noise [%s] SNR [%s] Quality [%d]", ssid.c_str(), strength.c_str(), noise.c_str(), snr.c_str(), quality);
                     }
