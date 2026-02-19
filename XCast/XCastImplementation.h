@@ -196,31 +196,6 @@ namespace WPEFramework
                         _parent.onIPAddressChange(std::move(interface), std::move(ipversion), std::move(ipaddress), status);
                     }
 
-                    void onInterfaceStateChange(const Exchange::INetworkManager::InterfaceState state, const string interface) override
-                    {
-                        LOGINFO("Interface State Changed: Interface [%s] State [%d]", interface.c_str(), state);
-                    }
-
-                    void onInternetStatusChange(const Exchange::INetworkManager::InternetStatus prevState, const Exchange::INetworkManager::InternetStatus currState, const string interface) override
-                    {
-                        LOGINFO("Internet Status Changed for Interface [%s]: [%d] -- > [%d]", interface.c_str(), prevState, currState);
-                    }
-
-                    void onAvailableSSIDs(const string jsonOfScanResults) override
-                    {
-                        LOGINFO("SSIDs: [%s]", jsonOfScanResults.c_str());
-                    }
-
-                    void onWiFiStateChange(const Exchange::INetworkManager::WiFiState state) override
-                    {
-                        LOGINFO("WiFi State changed: [%d]", state);
-                    }
-
-                    void onWiFiSignalQualityChange(const string ssid, const string strength, const string noise, const string snr, const Exchange::INetworkManager::WiFiSignalQuality quality) override
-                    {
-                        LOGINFO("WiFi Signal Quality changed: SSID [%s] Strength [%s] Noise [%s] SNR [%s] Quality [%d]", ssid.c_str(), strength.c_str(), noise.c_str(), snr.c_str(), quality);
-                    }
-
                     BEGIN_INTERFACE_MAP(NetworkManagerNotification)
                     INTERFACE_ENTRY(Exchange::INetworkManager::INotification)
                     END_INTERFACE_MAP
