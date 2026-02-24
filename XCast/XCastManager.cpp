@@ -20,7 +20,11 @@
 #include "XCastManager.h"
 #include "UtilsJsonRpc.h"
 #include "rfcapi.h"
-#include<interfaces/IConfiguration.h>
+#include <interfaces/IConfiguration.h>
+#include <interfaces/IDeviceInfo.h>
+#include <cryptalgo/Hash.h>
+#include <sstream>
+#include <iomanip>
 
 using namespace std;
 using namespace WPEFramework;
@@ -50,7 +54,7 @@ void XCastManager::onApplicationLaunchRequestWithLaunchParam(string appName,stri
 {
     if ( nullptr != m_observer )
     {
-        m_observer->onXcastApplicationLaunchRequestWithParam(appName,strPayLoad,strQuery,strAddDataUrl);
+        m_observer->onXcastApplicationLaunchRequestWithParam(appName,std::move(strPayLoad),strQuery,strAddDataUrl);
     }
 }
 
@@ -58,7 +62,7 @@ void XCastManager::onApplicationLaunchRequest(string appName, string parameter)
 {
     if ( nullptr != m_observer )
     {
-        m_observer->onXcastApplicationLaunchRequest(appName,parameter);
+        m_observer->onXcastApplicationLaunchRequest(std::move(appName),std::move(parameter));
     }
 }
 
@@ -66,7 +70,7 @@ void XCastManager::onApplicationStopRequest(string appName, string appID)
 {
     if ( nullptr != m_observer )
     {
-        m_observer->onXcastApplicationStopRequest(appName,appID);
+        m_observer->onXcastApplicationStopRequest(std::move(appName),std::move(appID));
     }
 }
 
@@ -74,7 +78,7 @@ void XCastManager::onApplicationHideRequest(string appName, string appID)
 {
     if ( nullptr != m_observer )
     {
-        m_observer->onXcastApplicationHideRequest(appName,appID);
+        m_observer->onXcastApplicationHideRequest(std::move(appName),std::move(appID));
     }
 }
 
@@ -82,7 +86,7 @@ void XCastManager::onApplicationResumeRequest(string appName, string appID)
 {
     if ( nullptr != m_observer )
     {
-        m_observer->onXcastApplicationResumeRequest(appName,appID);
+        m_observer->onXcastApplicationResumeRequest(std::move(appName),std::move(appID));
     }
 }
 
@@ -90,7 +94,7 @@ void XCastManager::onApplicationStateRequest(string appName, string appID)
 {
     if ( nullptr != m_observer )
     {
-        m_observer->onXcastApplicationStateRequest(appName,appID);
+        m_observer->onXcastApplicationStateRequest(std::move(appName),std::move(appID));
     }
 }
 
@@ -98,7 +102,7 @@ void XCastManager::updatePowerState(string powerState)
 {
     if ( nullptr != m_observer )
     {
-        m_observer->onXcastUpdatePowerStateRequest(powerState);
+        m_observer->onXcastUpdatePowerStateRequest(std::move(powerState));
     }
 }
 
@@ -108,7 +112,7 @@ XCastManager::~XCastManager()
     m_observer = nullptr;
 }
 
-bool XCastManager::initialize(const std::string& gdial_interface_name, bool networkStandbyMode )
+bool XCastManager::initialize(WPEFramework::PluginHost::IShell* pluginService, const std::string& gdial_interface_name, bool networkStandbyMode )
 {
     std::vector<std::string> gdial_args;
     bool returnValue = false,
@@ -190,11 +194,11 @@ bool XCastManager::initialize(const std::string& gdial_interface_name, bool netw
     }
 
     gdial_args.push_back("-I");
-    gdial_args.push_back(temp_interface);
+    gdial_args.push_back(std::move(temp_interface));
 
     if (m_uuid.empty())
     {
-        m_uuid = getReceiverID();
+        m_uuid = getReceiverID(pluginService);
     }
 
     if (!m_uuid.empty())
@@ -291,7 +295,7 @@ void XCastManager::shutdown()
     }
 }
 
-std::string XCastManager::getReceiverID(void)
+std::string XCastManager::getReceiverID(WPEFramework::PluginHost::IShell* pluginService)
 {
     std::ifstream file("/tmp/gpid.txt");
     std::string line, gpidValue, receiverId = "";
@@ -320,7 +324,7 @@ std::string XCastManager::getReceiverID(void)
         }
         // Convert to lowercase
         std::transform(gpidValue.begin(), gpidValue.end(), gpidValue.begin(), ::tolower);
-        receiverId = gpidValue;
+        receiverId = std::move(gpidValue);
     }
 
     if (receiverId.empty())
@@ -334,6 +338,35 @@ std::string XCastManager::getReceiverID(void)
         else if (whitebox_deviceId)
         {
             std::getline(whitebox_deviceId, receiverId);
+        }
+    }
+
+    if (receiverId.empty())
+    {
+        LOGINFO("ReceiverID not found, attempting to generate UUID from serial number");
+
+        static std::string cachedGeneratedUUID;
+
+        if (!cachedGeneratedUUID.empty()) {
+            LOGINFO("Using cached generated UUID: %s", cachedGeneratedUUID.c_str());
+            receiverId = cachedGeneratedUUID;
+        } else if (pluginService != nullptr) {
+            // Generate UUID from serial number
+            std::string serialNumber;
+            if (getSerialNumberFromDeviceInfo(pluginService, serialNumber)) {
+                receiverId = generateUUIDv5FromSerialNumber(serialNumber);
+                if (!receiverId.empty()) {
+                    // Cache the generated UUID since serial number is constant
+                    cachedGeneratedUUID = receiverId;
+                    LOGINFO("Generated and cached UUID from serial number: %s", cachedGeneratedUUID.c_str());
+                } else {
+                    LOGERR("Failed to generate UUID from serial number");
+                }
+            } else {
+                LOGERR("Failed to retrieve serial number from DeviceInfo plugin");
+            }
+        } else {
+            LOGINFO("Plugin service not available, cannot generate UUID from serial number");
         }
     }
     return receiverId;
@@ -402,7 +435,7 @@ bool XCastManager::envGetValue(const char *key, std::string &value)
     return returnValue;
 }
 
-int XCastManager::applicationStateChanged( string app, string state, string id, string error)
+int XCastManager::applicationStateChanged( const string& app, const string& state, const string& id, const string& error)
 {
     int status = 0;
     LOGINFO("AppName[%s] AppState[%s] AppID[%s] Error[%s]", app.c_str(), id.c_str() , state.c_str() , error.c_str());
@@ -417,18 +450,18 @@ int XCastManager::applicationStateChanged( string app, string state, string id, 
     return status;
 }//app && state not empty
 
-void XCastManager::enableCastService(string friendlyname,bool enableService)
+void XCastManager::enableCastService(const string& friendlyname,bool enableService)
 {
     LOGINFO("friendlyname[%s] enableService[%d]", friendlyname.c_str(), enableService);
     lock_guard<recursive_mutex> lock(m_mutexSync);
     if(gdialCastObj != NULL)
     {
         std::string activation = enableService ? "true": "false";
-        gdialCastObj->ActivationChanged( activation, friendlyname);
+        gdialCastObj->ActivationChanged( std::move(activation), friendlyname);
         LOGINFO("XcastService send onActivationChanged");
     }
     else
-        LOGINFO(" gdialCastObj is NULL ");    
+        LOGINFO(" gdialCastObj is NULL ");
 }
 
 string XCastManager::getProtocolVersion(void)
@@ -455,14 +488,16 @@ int XCastManager::setManufacturerName( string manufacturer)
     int status = 0;
     LOGINFO("Manufacturer[%s]", manufacturer.c_str());
     lock_guard<recursive_mutex> lock(m_mutexSync);
-    m_manufacturerName = manufacturer;
     if(gdialCastObj != NULL)
     {
         gdialCastObj->setManufacturerName( manufacturer );
         status = 1;
     }
     else
+    {
         LOGINFO(" gdialCastObj is NULL ");
+    }
+    m_manufacturerName = std::move(manufacturer);
     return status;
 }
 
@@ -478,14 +513,16 @@ int XCastManager::setModelName( string model)
     int status = 0;
     lock_guard<recursive_mutex> lock(m_mutexSync);
     LOGINFO("Model[%s]", model.c_str());
-    m_modelName = model;
     if(gdialCastObj != NULL)
     {
         gdialCastObj->setModelName(model);
         status = 1;
     }
     else
+    {
         LOGINFO(" gdialCastObj is NULL ");
+    }
+    m_modelName = std::move(model);
     return status;
 }
 
@@ -505,7 +542,7 @@ void XCastManager::registerApplications(std::vector<DynamicAppConfig*>& appConfi
     for (DynamicAppConfig* pDynamicAppConfig : appConfigList)
     {
         RegisterAppEntry* appReq = new RegisterAppEntry;
-        
+
         appReq->Names = pDynamicAppConfig->appName;
         appReq->prefixes = pDynamicAppConfig->prefixes;
         appReq->cors = pDynamicAppConfig->cors;
@@ -555,4 +592,111 @@ XCastManager * XCastManager::getInstance()
     }
     LOGINFO("Exiting ...");
     return XCastManager::_instance;
+}
+
+bool XCastManager::getSerialNumberFromDeviceInfo(WPEFramework::PluginHost::IShell* pluginService, std::string& serialNumber)
+{
+    if (pluginService == nullptr) {
+        LOGERR("Plugin service is null; cannot call DeviceInfo.");
+        return false;
+    }
+
+    auto deviceInfoPlugin = pluginService->QueryInterfaceByCallsign<WPEFramework::Exchange::IDeviceInfo>("DeviceInfo");
+    if (deviceInfoPlugin == nullptr) {
+        LOGERR("DeviceInfo plugin is not available or not activated");
+        return false;
+    }
+
+    WPEFramework::Exchange::IDeviceInfo::DeviceSerialNo deviceSerialNumber;
+    Core::hresult result = deviceInfoPlugin->SerialNumber(deviceSerialNumber);
+
+    if (result == Core::ERROR_NONE && !deviceSerialNumber.serialnumber.empty()) {
+        serialNumber = deviceSerialNumber.serialnumber;
+        deviceInfoPlugin->Release();
+        return true;
+    }
+
+    LOGERR("get DeviceInfo.SerialNumber failed, error code: %u, length: %zu", result, deviceSerialNumber.serialnumber.length());
+    deviceInfoPlugin->Release();
+
+    return false;
+}
+
+std::string XCastManager::generateUUIDv5FromSerialNumber(const std::string& serialNumber)
+{
+    LOGINFO("Generating UUID v5 from serial number...");
+
+    if (serialNumber.empty()) {
+        LOGERR("Serial number is empty, cannot generate UUID");
+        return "";
+    }
+
+    // UUID v5 uses SHA-1 hashing
+    // DNS namespace UUID: 6ba7b810-9dad-11d1-80b4-00c04fd430c8
+    // Ref: https://datatracker.ietf.org/doc/html/rfc4122
+    const uint8_t namespaceDNS[16] = {
+        0x6b, 0xa7, 0xb8, 0x10, 0x9d, 0xad, 0x11, 0xd1,
+        0x80, 0xb4, 0x00, 0xc0, 0x4f, 0xd4, 0x30, 0xc8
+    };
+
+    // Concatenate namespace UUID and serial number for hashing
+    std::vector<uint8_t> data(namespaceDNS, namespaceDNS + 16);
+    data.insert(data.end(), serialNumber.begin(), serialNumber.end());
+
+    // Compute SHA-1 hash and copy immediately to ensure data is preserved
+    Crypto::SHA1 sha1;
+    sha1.Input(data.data(), data.size());
+    const uint8_t* hashResult = sha1.Result();
+
+    if (hashResult == nullptr) {
+        LOGERR("SHA-1 hash computation failed");
+        return "";
+    }
+
+    // Copy hash data before sha1 object goes out of scope
+    uint8_t uuidBytes[16];
+    memcpy(uuidBytes, hashResult, 16);
+
+    // Set version (5) and variant bits according to RFC 4122
+    uuidBytes[6] = (uuidBytes[6] & 0x0F) | 0x50;  // Version 5
+    uuidBytes[8] = (uuidBytes[8] & 0x3F) | 0x80;  // Variant bits
+
+    /**
+     * @brief Helper lambda to format a range of bytes as hexadecimal into an output stream.
+     * It formats each byte in the specified range [start, end) as a 2-digit hexadecimal value
+     * and appends it to the provided ostringstream.
+     *
+     * @param stream The output string stream to write formatted bytes to (passed by reference)
+     * @param bytes Pointer to the byte array to be formatted
+     * @param start Starting index (inclusive) of the byte range to format
+     * @param end Ending index (exclusive) of the byte range to format
+     *
+     * @note Defined as a lambda rather than a separate function to keep the formatting logic
+     *       close to its single use case and to avoid polluting the namespace with a small
+     *       utility function that is not needed elsewhere.
+     */
+    auto formatBytes = [](std::ostringstream& stream, const uint8_t* bytes, int start, int end) {
+        for (int i = start; i < end; i++) {
+            stream << std::setw(2) << static_cast<unsigned int>(bytes[i]);
+        }
+    };
+
+    // Format as UUID string: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+    std::ostringstream uuidStream;
+    uuidStream << std::hex << std::setfill('0');
+
+    formatBytes(uuidStream, uuidBytes, 0, 4);
+    uuidStream << "-";
+    formatBytes(uuidStream, uuidBytes, 4, 6);
+    uuidStream << "-";
+    formatBytes(uuidStream, uuidBytes, 6, 8);
+    uuidStream << "-";
+    formatBytes(uuidStream, uuidBytes, 8, 10);
+    uuidStream << "-";
+    formatBytes(uuidStream, uuidBytes, 10, 16);
+
+    std::string uuid = uuidStream.str();
+    LOGINFO("Generated UUID v5: %s", uuid.c_str());
+
+    return uuid;
 }
