@@ -54,7 +54,7 @@ void XCastManager::onApplicationLaunchRequestWithLaunchParam(string appName,stri
 {
     if ( nullptr != m_observer )
     {
-        m_observer->onXcastApplicationLaunchRequestWithParam(appName,std::move(strPayLoad),strQuery,strAddDataUrl);
+        m_observer->onXcastApplicationLaunchRequestWithParam(std::move(appName),std::move(strPayLoad),std::move(strQuery),std::move(strAddDataUrl));
     }
 }
 

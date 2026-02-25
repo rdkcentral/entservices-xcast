@@ -1093,7 +1093,8 @@ TEST_F(XCastManagerTest, getSerialNumberFromDeviceInfo_DeviceInfoPluginNotAvaila
 
     // Mock service that returns null for DeviceInfo plugin query
     EXPECT_CALL(mockService, QueryInterfaceByCallsign(::testing::_, ::testing::StrEq("DeviceInfo")))
-        .WillOnce(::testing::Return(nullptr));    bool result = testWrapper.testGetSerialNumberFromDeviceInfo(&mockService, serialNumber);
+        .WillOnce(::testing::Return(nullptr));    
+    bool result = testWrapper.testGetSerialNumberFromDeviceInfo(&mockService, serialNumber);
 
     EXPECT_FALSE(result);
     EXPECT_TRUE(serialNumber.empty());
@@ -1151,7 +1152,8 @@ TEST_F(XCastManagerTest, getSerialNumberFromDeviceInfo_Success)
 
     // Mock service that returns valid DeviceInfo plugin
     EXPECT_CALL(mockService, QueryInterfaceByCallsign(::testing::_, ::testing::StrEq("DeviceInfo")))
-        .WillOnce(::testing::Return(&mockDeviceInfo));    // Mock DeviceInfo that returns success with valid serial number
+        .WillOnce(::testing::Return(&mockDeviceInfo));    
+    // Mock DeviceInfo that returns success with valid serial number
     WPEFramework::Exchange::IDeviceInfo::DeviceSerialNo deviceSerialNumber;
     deviceSerialNumber.serialnumber = expectedSerial;
     EXPECT_CALL(mockDeviceInfo, SerialNumber(::testing::_))
@@ -1233,8 +1235,8 @@ TEST_F(XCastManagerTest, generateUUIDv5FromSerialNumber_SpecialCharacters)
     std::string result = testWrapper.testGenerateUUIDv5FromSerialNumber(serialNumber);
 
     // Should handle special characters and produce valid UUID
-    EXPECT_EQ(result.length(), 36u);
-    EXPECT_FALSE(result.empty());    // Verify UUID format
+    EXPECT_EQ(result.length(), 36u); // Verify UUID format
+    EXPECT_FALSE(result.empty());
     EXPECT_EQ(result[8], '-');
     EXPECT_EQ(result[13], '-');
     EXPECT_EQ(result[18], '-');
@@ -1249,8 +1251,8 @@ TEST_F(XCastManagerTest, generateUUIDv5FromSerialNumber_LongSerialNumber)
     std::string result = testWrapper.testGenerateUUIDv5FromSerialNumber(serialNumber);
 
     // Should handle long input and produce valid UUID
-    EXPECT_EQ(result.length(), 36u);
-    EXPECT_FALSE(result.empty());    // Verify UUID format
+    EXPECT_EQ(result.length(), 36u); // Verify UUID format
+    EXPECT_FALSE(result.empty());
     EXPECT_EQ(result[8], '-');
     EXPECT_EQ(result[13], '-');
     EXPECT_EQ(result[18], '-');
@@ -1266,7 +1268,8 @@ TEST_F(XCastManagerTest, Integration_GetSerialAndGenerateUUID)
 
     // Setup mock for successful serial retrieval
     EXPECT_CALL(mockService, QueryInterfaceByCallsign(::testing::_, ::testing::StrEq("DeviceInfo")))
-        .WillOnce(::testing::Return(&mockDeviceInfo));    WPEFramework::Exchange::IDeviceInfo::DeviceSerialNo deviceSerialNumber;
+        .WillOnce(::testing::Return(&mockDeviceInfo));    
+    WPEFramework::Exchange::IDeviceInfo::DeviceSerialNo deviceSerialNumber;
     deviceSerialNumber.serialnumber = expectedSerial;
     EXPECT_CALL(mockDeviceInfo, SerialNumber(::testing::_))
         .WillOnce(::testing::DoAll(
