@@ -13,6 +13,7 @@ on:
 
 env:
   BUILD_TYPE: Debug
+  REPO_NAME: "entservices-xcast"
   THUNDER_REF: "R4.4.1"
   INTERFACES_REF: "develop"
   AUTOMATICS_UNAME: ${{ secrets.AUTOMATICS_UNAME}}
@@ -45,25 +46,25 @@ jobs:
         uses: actions/cache@v3
         with:
           path: |
-            thunder/build/Thunder
-            thunder/build/entservices-apis
-            thunder/build/ThunderTools
-            thunder/install
-            !thunder/install/etc/WPEFramework/plugins
-            !thunder/install/usr/bin/RdkServicesTest
-            !thunder/install/usr/include/gmock
-            !thunder/install/usr/include/gtest
-            !thunder/install/usr/lib/libgmockd.a
-            !thunder/install/usr/lib/libgmock_maind.a
-            !thunder/install/usr/lib/libgtestd.a
-            !thunder/install/usr/lib/libgtest_maind.a
-            !thunder/install/usr/lib/cmake/GTest
-            !thunder/install/usr/lib/pkgconfig/gmock.pc
-            !thunder/install/usr/lib/pkgconfig/gmock_main.pc
-            !thunder/install/usr/lib/pkgconfig/gtest.pc
-            !thunder/install/usr/lib/pkgconfig/gtest_main.pc
-            !thunder/install/usr/lib/wpeframework/plugins
-          key: ${{ runner.os }}-${{ env.THUNDER_REF }}-${{ env.INTERFACES_REF }}-4
+            build/Thunder
+            build/entservices-apis
+            build/ThunderTools
+            install
+            !install/etc/WPEFramework/plugins
+            !install/usr/bin/RdkServicesTest
+            !install/usr/include/gmock
+            !install/usr/include/gtest
+            !install/usr/lib/libgmockd.a
+            !install/usr/lib/libgmock_maind.a
+            !install/usr/lib/libgtestd.a
+            !install/usr/lib/libgtest_maind.a
+            !install/usr/lib/cmake/GTest
+            !install/usr/lib/pkgconfig/gmock.pc
+            !install/usr/lib/pkgconfig/gmock_main.pc
+            !install/usr/lib/pkgconfig/gtest.pc
+            !install/usr/lib/pkgconfig/gtest_main.pc
+            !install/usr/lib/wpeframework/plugins
+          key: ${{ runner.os }}-${{ env.REPO_NAME }}-${{ env.THUNDER_REF }}-${{ env.INTERFACES_REF }}-4
 
       - name: Set up Python
         uses: actions/setup-python@v4
@@ -103,7 +104,6 @@ jobs:
             sudo ninja -C build install
 
       - name: Checkout Thunder
-        if: steps.cache.outputs.cache-hit != 'true'
         uses: actions/checkout@v3
         with:
           repository: rdkcentral/Thunder
@@ -134,11 +134,6 @@ jobs:
           ref: main
           fetch-depth: 1
 
-      - name: Copy INetworkManager interface header
-        run: |
-          mkdir -p "$GITHUB_WORKSPACE/install/usr/include/WPEFramework/interfaces"
-          cp "$GITHUB_WORKSPACE/networkmanager/interface/INetworkManager.h" "$GITHUB_WORKSPACE/install/usr/include/WPEFramework/interfaces/"
-
       - name: Checkout entservices-xcast
         if: ${{ inputs.caller_source == 'local' }}
         uses: actions/checkout@v3
@@ -162,6 +157,7 @@ jobs:
           ref: v1.15.0
 
       - name: Apply patches ThunderTools
+        if: steps.cache.outputs.cache-hit != 'true'
         run: |  
           cd $GITHUB_WORKSPACE/ThunderTools
           patch -p1 < $GITHUB_WORKSPACE/entservices-testframework/patches/00010-R4.4-Add-support-for-project-dir.patch
@@ -183,6 +179,7 @@ jobs:
           cmake --install build/ThunderTools
 
       - name: Apply patches Thunder
+        if: steps.cache.outputs.cache-hit != 'true'
         run: |
           cd $GITHUB_WORKSPACE/Thunder
           patch -p1 < $GITHUB_WORKSPACE/entservices-testframework/patches/Use_Legact_Alt_Based_On_ThunderTools_R4.4.3.patch
@@ -211,14 +208,21 @@ jobs:
           cmake --install build/Thunder
 
       - name: Checkout entservices-apis
-        if: steps.cache.outputs.cache-hit != 'true'
         uses: actions/checkout@v3
         with:
           repository: rdkcentral/entservices-apis
           path: entservices-apis
           ref: ${{env.INTERFACES_REF}}
           #token : ${{ secrets.RDKCM_RDKE }}
-          run: rm -rf $GITHUB_WORKSPACE/entservices-apis/jsonrpc/DTV.json
+
+      - name: Remove DTV.json
+        run: rm -rf $GITHUB_WORKSPACE/entservices-apis/jsonrpc/DTV.json
+
+      - name: Copy INetworkManager interface header
+        run: |
+          mkdir -p "$GITHUB_WORKSPACE/install/usr/include/WPEFramework/interfaces"
+          cp "$GITHUB_WORKSPACE/networkmanager/interface/INetworkManager.h" "$GITHUB_WORKSPACE/install/usr/include/WPEFramework/interfaces/"
+          cp "$GITHUB_WORKSPACE/networkmanager/interface/INetworkManager.h" "$GITHUB_WORKSPACE/entservices-apis/apis/"
 
       - name: Build entservices-apis
         run: >
@@ -360,8 +364,6 @@ jobs:
           -I $GITHUB_WORKSPACE/entservices-testframework/Tests/headers/network
           -I $GITHUB_WORKSPACE/entservices-testframework/Tests
           -I $GITHUB_WORKSPACE/entservices-xcast/helpers
-          -I $GITHUB_WORKSPACE/Thunder/Source
-          -I $GITHUB_WORKSPACE/Thunder/Source/core
           -I $GITHUB_WORKSPACE/install/usr/include
           -I ./usr/include/libdrm
           -include $GITHUB_WORKSPACE/entservices-testframework/Tests/mocks/devicesettings.h
@@ -419,8 +421,6 @@ jobs:
           -I $GITHUB_WORKSPACE/entservices-testframework/Tests/headers/ccec/drivers
           -I $GITHUB_WORKSPACE/entservices-testframework/Tests/headers/network
           -I $GITHUB_WORKSPACE/entservices-testframework/Tests
-          -I $GITHUB_WORKSPACE/Thunder/Source
-          -I $GITHUB_WORKSPACE/Thunder/Source/core
           -I $GITHUB_WORKSPACE/install/usr/include
           -I $GITHUB_WORKSPACE/install/usr/include/WPEFramework
           -include $GITHUB_WORKSPACE/entservices-testframework/Tests/mocks/devicesettings.h

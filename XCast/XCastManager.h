@@ -28,8 +28,15 @@
 #include "XCastCommon.h"
 #include <gdialservicecommon.h>
 #include <gdialservice.h>
+
 using namespace std;
 
+// Forward declaration
+namespace WPEFramework {
+    namespace PluginHost {
+        class IShell;
+    }
+}
 
 /**
  * This is the Manager class for interacting with gdial library.
@@ -37,15 +44,15 @@ using namespace std;
 class XCastManager : public GDialNotifier
 {
 protected:
-    XCastManager(){}
+    XCastManager() : m_observer(nullptr) {}
 public:
     virtual ~XCastManager();
     /**
      * Initialize gdialService to communication with gdial server
      */
-    bool initialize(const std::string& gdial_interface_name, bool networkStandbyMode );
+    bool initialize(WPEFramework::PluginHost::IShell* pluginService, const std::string& gdial_interface_name, bool networkStandbyMode );
     void deinitialize();
-    
+
     /** Shutdown gdialService connectivity */
     void shutdown();
     /**
@@ -56,13 +63,13 @@ public:
      *   @param error - The error string if the requested application is not available or due to other errors
      *   @return indicates whether state is properly communicated to rtdial server.
      */
-    int applicationStateChanged( string app, string state, string id, string error);
+    int applicationStateChanged( const string& app, const string& state, const string& id, const string& error);
     /**
      *This function will enable cast service by default.
      *@param friendlyname - friendlyname
      *@param enableService - Enable/Disable the SSDP discovery of Dial server
      */
-    void enableCastService(string friendlyname,bool enableService = true);
+    void enableCastService(const string& friendlyname,bool enableService = true);
 
     void registerApplications (std::vector<DynamicAppConfig*>& appConfigList);
     string  getProtocolVersion(void);
@@ -90,17 +97,33 @@ public:
      *Call back function for rtConnection
      */
     int isGDialStarted();
-    
+
     void setService(XCastNotifier * service){
         m_observer = service;
     }
 private:
     //Internal methods
     XCastNotifier * m_observer;
+
     void getWiFiInterface(std::string& WiFiInterfaceName);
     void getGDialInterfaceName(std::string& interfaceName);
-    std::string getReceiverID(void);
+    std::string getReceiverID(WPEFramework::PluginHost::IShell* pluginService);
     bool envGetValue(const char *key, std::string &value);
+    /**
+     * Retrieves the device serial number from the deviceInfo plugin using on-demand acquisition.
+     * @param pluginService The IShell service to query DeviceInfo plugin from
+     * @param serialNumber [out] Contains serial number string on success.
+     * @return true if the serial number was successfully retrieved, false otherwise.
+     */
+    bool getSerialNumberFromDeviceInfo(WPEFramework::PluginHost::IShell* pluginService, std::string& serialNumber);
+
+    /**
+     * Generates a UUID version 5 using the DNS namespace and SHA-1 hashing according to RFC 4122,
+     * based on the provided serial number string.
+     * @param serialNumber The serial number string to use as the basis for the UUID.
+     * @return A string containing the generated UUID v5 on success; empty string on any failure.
+     */
+    std::string generateUUIDv5FromSerialNumber(const std::string& serialNumber);
 
     // Class level contracts
     // Singleton instance
