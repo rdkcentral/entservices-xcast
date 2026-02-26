@@ -85,7 +85,7 @@ namespace WPEFramework
                     Job(XCastImplementation *tts, Event event,string callsign,JsonObject &params)
                         : _xcast(tts)
                         , _event(event)
-                        , _callsign(callsign)
+                        , _callsign(std::move(callsign))
                         , _params(params) {
                         if (_xcast != nullptr) {
                             _xcast->AddRef();
