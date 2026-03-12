@@ -106,7 +106,6 @@ namespace WPEFramework {
 						{
 							if(_parent._connectionId == connection->Id())
 							{
-								LOGINFO("XCast Notification Activated");
 							}
 						}
 		
@@ -114,7 +113,6 @@ namespace WPEFramework {
 						{
 							if(_parent._connectionId == connection->Id())
 							{
-								LOGINFO("XCast Notification Deactivated");
 								_parent.Deactivated(connection);
 							}
 						}
