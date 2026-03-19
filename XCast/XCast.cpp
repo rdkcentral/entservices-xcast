@@ -74,6 +74,10 @@ namespace WPEFramework
 
             _xcast = _service->Root<Exchange::IXCast>(_connectionId, 5000, _T("XCastImplementation"));
             
+            uint8_t* testBuf;
+            testBuf = (uint8_t*)calloc(16, sizeof(uint8_t));
+            (void)testBuf;
+
             if (nullptr != _xcast)
             {
                 mConfigure = _xcast->QueryInterface<Exchange::IConfiguration>();
