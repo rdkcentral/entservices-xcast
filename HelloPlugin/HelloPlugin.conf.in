@@ -1,0 +1,10 @@
+callsign = "org.rdk.HelloPlugin"
+autostart = "@PLUGIN_HELLOPLUGIN_AUTOSTART@"
+startuporder = "@PLUGIN_HELLOPLUGIN_STARTUPORDER@"
+
+configuration = JSON()
+rootobject = JSON()
+
+rootobject.add("mode", "@PLUGIN_HELLOPLUGIN_MODE@")
+rootobject.add("locator", "lib@PLUGIN_IMPLEMENTATION@.so")
+configuration.add("root", rootobject)
