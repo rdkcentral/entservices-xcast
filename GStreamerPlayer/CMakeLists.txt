@@ -26,7 +26,7 @@ set(PLUGIN_GSTREAMERPLAYER_MODE "Off" CACHE STRING "Controls if the plugin shoul
 find_package(${NAMESPACE}Plugins REQUIRED)
 find_package(${NAMESPACE}Definitions REQUIRED)
 find_package(GLIB REQUIRED)
-find_package(GStreamer REQUIRED)
+find_package(GStreamer)
 
 if (USE_THUNDER_R4)
     find_package(${NAMESPACE}COM REQUIRED)
@@ -45,20 +45,13 @@ set_target_properties(${MODULE_NAME} PROPERTIES
 
 target_compile_definitions(${MODULE_NAME} PRIVATE MODULE_NAME=Plugin_${PLUGIN_NAME})
 
-target_include_directories(${MODULE_NAME} PRIVATE
+include_directories(
         ../helpers
-        ${GSTREAMER_BASE_INCLUDE_DIRS}
-        ${GSTREAMER_AUDIO_INCLUDE_DIRS}
-        ${GSTREAMER_VIDEO_INCLUDE_DIRS}
 )
 
 target_link_libraries(${MODULE_NAME} PRIVATE 
         ${NAMESPACE}Plugins::${NAMESPACE}Plugins 
         ${NAMESPACE}Definitions::${NAMESPACE}Definitions
-        GStreamer::GStreamer
-        ${GSTREAMER_BASE_LIBRARIES}
-        ${GSTREAMER_AUDIO_LIBRARIES}
-        ${GSTREAMER_VIDEO_LIBRARIES}
 )
 
 install(TARGETS ${MODULE_NAME}
@@ -73,10 +66,6 @@ target_link_libraries(${PLUGIN_IMPLEMENTATION}
         PRIVATE
         ${NAMESPACE}Plugins::${NAMESPACE}Plugins
         ${NAMESPACE}Definitions::${NAMESPACE}Definitions
-        GStreamer::GStreamer
-        ${GSTREAMER_BASE_LIBRARIES}
-        ${GSTREAMER_AUDIO_LIBRARIES}
-        ${GSTREAMER_VIDEO_LIBRARIES}
 )
 
 set_target_properties(${PLUGIN_IMPLEMENTATION} PROPERTIES
@@ -89,13 +78,6 @@ else ()
     target_link_libraries(${PLUGIN_IMPLEMENTATION} PRIVATE ${NAMESPACE}Protocols::${NAMESPACE}Protocols)
 endif (USE_THUNDER_R4)
 
-# Include directories
-target_include_directories(${PLUGIN_IMPLEMENTATION} PRIVATE 
-        ../helpers
-        ${GSTREAMER_BASE_INCLUDE_DIRS}
-        ${GSTREAMER_AUDIO_INCLUDE_DIRS}
-        ${GSTREAMER_VIDEO_INCLUDE_DIRS}
-)
 
 install(TARGETS ${PLUGIN_IMPLEMENTATION}
         DESTINATION lib/${STORAGE_DIRECTORY}/plugins)
