@@ -18,3 +18,4 @@
 #
 # features
 #
+option(PLUGIN_GSTREAMERPLAYER "Enable the GStreamerPlayer out-of-process plugin" OFF)
