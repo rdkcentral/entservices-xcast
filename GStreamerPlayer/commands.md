@@ -52,8 +52,10 @@ Load and play media from the given URI. Builds a GStreamer pipeline internally: 
 
 ```bash
 curl -d '{"jsonrpc":"2.0","id":10,"method":"org.rdk.GStreamerPlayer.1.play","params":{"uri":"https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4"}}' http://127.0.0.1:9998/jsonrpc
-```
 
+curl -d '{"jsonrpc":"2.0","id":10,"method":"org.rdk.GStreamerPlayer.1.play","params":{"uri":"https://gstreamer.freedesktop.org/data/media/sintel_trailer-480p.webm"}}' http://127.0.0.1:9998/jsonrpc
+
+```
 Expected response:
 ```json
 {"jsonrpc":"2.0","id":10,"result":null}

@@ -32,11 +32,13 @@
  *
  * Pipeline topology:
  *
- *   uridecodebin --[pad-added]--+--> videoconvert --> westerossink
- *                               \--> audioconvert --> audioresample --> autoaudiosink
+ *   uridecodebin --[pad-added]--+--> queue --> videoconvert --> westerossink
+ *                               \--> queue --> audioconvert --> audioresample --> autoaudiosink
  *
- * videoconvert / audioconvert / audioresample bridge any pixel-format or
- * sample-rate mismatch between uridecodebin and the sinks.
+ * queue elements decouple the uridecodebin streaming thread from the sink
+ * threads, preventing deadlocks during dynamic pad linking.
+ * videoconvert / audioconvert / audioresample bridge pixel-format and
+ * sample-rate mismatches between uridecodebin and the sinks.
  */
 
 #pragma once
@@ -101,9 +103,11 @@ namespace WPEFramework {
             // immediately in DestroyPipeline().
             GstElement* _pipeline;      // top-level GstPipeline
             GstElement* _uridecodebin;  // decodes any URI; emits pad-added signals
+            GstElement* _audioQueue;    // decouples streaming thread from audio sink thread
             GstElement* _audioConvert;  // converts any audio format for autoaudiosink
             GstElement* _audioResample; // resamples to the rate autoaudiosink requires
             GstElement* _audioSink;     // autoaudiosink: picks the best audio output
+            GstElement* _videoQueue;    // decouples streaming thread from video sink thread
             GstElement* _videoConvert;  // converts any pixel format for westerossink
             GstElement* _videoSink;     // westerossink: renders video via Westeros
 
