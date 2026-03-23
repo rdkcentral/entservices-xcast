@@ -29,12 +29,21 @@
  *
  * The GMainLoop runs in its own thread so that GStreamer can dispatch bus
  * messages (errors, EOS, state-changes) without blocking the COM-RPC thread.
+ *
+ * Pipeline topology:
+ *
+ *   uridecodebin --[pad-added]--+--> videoconvert --> westerossink
+ *                               \--> audioconvert --> audioresample --> autoaudiosink
+ *
+ * videoconvert / audioconvert / audioresample bridge any pixel-format or
+ * sample-rate mismatch between uridecodebin and the sinks.
  */
 
 #pragma once
 
 #include "Module.h"
 #include <interfaces/IGStreamerPlayer.h>
+#include "UtilsLogging.h"
 
 #include <com/com.h>
 #include <core/core.h>
@@ -71,7 +80,7 @@ namespace WPEFramework {
 
         private:
             // GStreamer callback: called whenever uridecodebin exposes a new decoded pad.
-            // We inspect the pad caps and link it to either the video or audio queue.
+            // We inspect the pad caps and link it directly to videoconvert or audioconvert.
             static void OnPadAdded(GstElement* src, GstPad* newPad, gpointer userData);
 
             // Bring the pipeline to GST_STATE_NULL, unref all elements, and stop the
@@ -92,9 +101,10 @@ namespace WPEFramework {
             // immediately in DestroyPipeline().
             GstElement* _pipeline;      // top-level GstPipeline
             GstElement* _uridecodebin;  // decodes any URI; emits pad-added signals
-            GstElement* _audioQueue;    // small queue buffer before the audio sink
+            GstElement* _audioConvert;  // converts any audio format for autoaudiosink
+            GstElement* _audioResample; // resamples to the rate autoaudiosink requires
             GstElement* _audioSink;     // autoaudiosink: picks the best audio output
-            GstElement* _videoQueue;    // small queue buffer before the video sink
+            GstElement* _videoConvert;  // converts any pixel format for westerossink
             GstElement* _videoSink;     // westerossink: renders video via Westeros
 
             // --- GMainLoop for bus messages ---
