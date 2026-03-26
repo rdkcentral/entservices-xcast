@@ -159,8 +159,19 @@ namespace WPEFramework {
 
             // Link the static chains.
             // The uridecodebin -> queue links are made dynamically in OnPadAdded().
-            gst_element_link_many(_videoQueue, _videoConvert, _videoSink, nullptr);
-            gst_element_link_many(_audioQueue, _audioConvert, _audioResample, _audioSink, nullptr);
+            if (!gst_element_link_many(_videoQueue, _videoConvert, _videoSink, nullptr)) {
+                LOGERR("GStreamerPlayer::Play: Failed to link videoQueue -> videoconvert -> videosink");
+                DestroyPipeline();
+                return Core::ERROR_GENERAL;
+            }
+            LOGINFO("GStreamerPlayer::Play: videoQueue -> videoconvert -> videosink linked successfully");
+
+            if (!gst_element_link_many(_audioQueue, _audioConvert, _audioResample, _audioSink, nullptr)) {
+                LOGERR("GStreamerPlayer::Play: Failed to link audioQueue -> audioconvert -> audioresample -> autoaudiosink");
+                DestroyPipeline();
+                return Core::ERROR_GENERAL;
+            }
+            LOGINFO("GStreamerPlayer::Play: audioQueue -> audioconvert -> audioresample -> autoaudiosink linked successfully");
 
             // Tell uridecodebin which content to fetch.
             g_object_set(_uridecodebin, "uri", uri.c_str(), nullptr);
