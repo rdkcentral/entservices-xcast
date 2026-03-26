@@ -85,6 +85,10 @@ namespace WPEFramework {
             // We inspect the pad caps and link it directly to videoconvert or audioconvert.
             static void OnPadAdded(GstElement* src, GstPad* newPad, gpointer userData);
 
+            // GStreamer bus watch: dispatches pipeline messages (ASYNC_DONE, ERROR, EOS)
+            // from the GMainLoop thread to the appropriate notification handler.
+            static gboolean OnBusMessage(GstBus* bus, GstMessage* message, gpointer userData);
+
             // Bring the pipeline to GST_STATE_NULL, unref all elements, and stop the
             // GMainLoop thread.  Safe to call even if no pipeline has been created yet.
             void DestroyPipeline();
@@ -115,6 +119,7 @@ namespace WPEFramework {
             // GStreamer dispatches errors, EOS and state-change messages on this loop.
             GMainLoop*  _mainLoop;
             std::thread _mainLoopThread;
+            guint       _busWatchId;    // ID returned by gst_bus_add_watch(); 0 when inactive
         };
 
     } // namespace Plugin

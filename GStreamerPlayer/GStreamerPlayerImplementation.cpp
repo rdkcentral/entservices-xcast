@@ -44,6 +44,7 @@ namespace WPEFramework {
             , _videoSink(nullptr)
             , _mainLoop(nullptr)
             , _mainLoopThread()
+            , _busWatchId(0)
         {
             // Initialise GStreamer once for this process.
             gst_init(nullptr, nullptr);
@@ -169,6 +170,15 @@ namespace WPEFramework {
             g_signal_connect(_uridecodebin, "pad-added",
                              G_CALLBACK(GStreamerPlayerImplementation::OnPadAdded), this);
 
+            // Attach a bus watch so that GStreamer messages (ASYNC_DONE, ERROR, EOS)
+            // are dispatched on the GMainLoop thread to OnBusMessage().
+            // This is the correct place to fire OnPlayerInitialized – only after the
+            // pipeline actually reaches PLAYING (ASYNC_DONE), not immediately after
+            // gst_element_set_state() which returns ASYNC for network URIs.
+            GstBus* bus = gst_pipeline_get_bus(GST_PIPELINE(_pipeline));
+            _busWatchId = gst_bus_add_watch(bus, GStreamerPlayerImplementation::OnBusMessage, this);
+            gst_object_unref(bus);
+
             // Start a GMainLoop in a background thread.
             // GStreamer needs a running GLib main loop to dispatch bus messages
             // (errors, EOS, state-change notifications) asynchronously.
@@ -185,8 +195,10 @@ namespace WPEFramework {
                 return Core::ERROR_GENERAL;
             }
 
-            LOGINFO("GStreamerPlayer::Play: pipeline started successfully");
-            FirePlayerInitialized();
+            // OnPlayerInitialized will be fired by OnBusMessage() when the bus posts
+            // GST_MESSAGE_ASYNC_DONE, which means the pipeline has fully transitioned
+            // to PLAYING and decoded pads have been linked.
+            LOGINFO("GStreamerPlayer::Play: pipeline started, awaiting ASYNC_DONE");
             return Core::ERROR_NONE;
         }
 
@@ -329,6 +341,13 @@ namespace WPEFramework {
                 // file descriptors and network connections.
                 gst_element_set_state(_pipeline, GST_STATE_NULL);
 
+                // Remove the bus watch before unreffing the pipeline so it cannot
+                // fire after the pipeline is gone.
+                if (_busWatchId != 0) {
+                    g_source_remove(_busWatchId);
+                    _busWatchId = 0;
+                }
+
                 // gst_object_unref on the pipeline releases the pipeline and all
                 // child elements that were added with gst_bin_add_many.
                 gst_object_unref(_pipeline);
@@ -355,6 +374,55 @@ namespace WPEFramework {
                 g_main_loop_unref(_mainLoop);
                 _mainLoop = nullptr;
             }
+        }
+
+        /**
+         * GStreamer bus message handler – runs on the GMainLoop thread.
+         *
+         * GST_MESSAGE_ASYNC_DONE : the pipeline reached PLAYING and all pads
+         *   are linked; safe to advertise that playback has started.
+         * GST_MESSAGE_ERROR      : an unrecoverable pipeline error occurred;
+         *   tear down the pipeline so resources are released.
+         * GST_MESSAGE_EOS        : end-of-stream; notify clients and clean up.
+         */
+        /* static */
+        gboolean GStreamerPlayerImplementation::OnBusMessage(
+            GstBus* /* bus */, GstMessage* message, gpointer userData)
+        {
+            GStreamerPlayerImplementation* self =
+                static_cast<GStreamerPlayerImplementation*>(userData);
+
+            switch (GST_MESSAGE_TYPE(message)) {
+                case GST_MESSAGE_ASYNC_DONE:
+                    LOGINFO("GStreamerPlayer::OnBusMessage: ASYNC_DONE – pipeline is now PLAYING");
+                    self->FirePlayerInitialized();
+                    break;
+
+                case GST_MESSAGE_ERROR: {
+                    GError* err   = nullptr;
+                    gchar*  debug = nullptr;
+                    gst_message_parse_error(message, &err, &debug);
+                    LOGERR("GStreamerPlayer::OnBusMessage: ERROR – %s (%s)",
+                           err ? err->message : "unknown",
+                           debug ? debug : "no debug info");
+                    g_clear_error(&err);
+                    g_free(debug);
+                    self->DestroyPipeline();
+                    break;
+                }
+
+                case GST_MESSAGE_EOS:
+                    LOGINFO("GStreamerPlayer::OnBusMessage: EOS");
+                    self->DestroyPipeline();
+                    self->FirePlayerStopped();
+                    break;
+
+                default:
+                    break;
+            }
+
+            // Returning TRUE keeps the watch active; FALSE would remove it.
+            return TRUE;
         }
 
         void GStreamerPlayerImplementation::FirePlayerInitialized()
