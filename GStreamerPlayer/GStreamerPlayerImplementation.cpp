@@ -140,7 +140,7 @@ namespace WPEFramework {
             _audioQueue    = gst_element_factory_make("queue",         "audioqueue");
             _audioConvert  = gst_element_factory_make("audioconvert",  "audioconvert");
             _audioResample = gst_element_factory_make("audioresample", "audioresample");
-            _audioSink     = gst_element_factory_make("autoaudiosink", "audiosink");
+            _audioSink     = gst_element_factory_make("glimagesink", "audiosink");
 
             if (!_pipeline || !_uridecodebin
                            || !_videoQueue || !_videoConvert || !_videoSink
@@ -245,15 +245,28 @@ namespace WPEFramework {
             LOGINFO("GStreamerPlayer::SetResolution x=%u y=%u width=%u height=%u",
                     x, y, width, height);
 
-            // Move and resize the video window on the Westeros compositor.
-            // "window-set" must be TRUE for position/size properties to take effect.
-            g_object_set(_videoSink,
-                         "window-set", TRUE,
-                         "x",          static_cast<gint>(x),
-                         "y",          static_cast<gint>(y),
-                         "width",      static_cast<gint>(width),
-                         "height",     static_cast<gint>(height),
-                         nullptr);
+            // render-rectangle expects a GstValueArray of four gint values: <x, y, width, height>.
+            // Build the array value and set it via g_object_set_property().
+            GValue rect = G_VALUE_INIT;
+            g_value_init(&rect, GST_TYPE_ARRAY);
+
+            const gint coords[4] = {
+                static_cast<gint>(x),
+                static_cast<gint>(y),
+                static_cast<gint>(width),
+                static_cast<gint>(height)
+            };
+
+            GValue item = G_VALUE_INIT;
+            g_value_init(&item, G_TYPE_INT);
+            for (int i = 0; i < 4; ++i) {
+                g_value_set_int(&item, coords[i]);
+                gst_value_array_append_value(&rect, &item);
+            }
+            g_value_unset(&item);
+
+            g_object_set_property(G_OBJECT(_videoSink), "render-rectangle", &rect);
+            g_value_unset(&rect);
 
             return Core::ERROR_NONE;
         }
