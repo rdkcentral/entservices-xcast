@@ -34,14 +34,15 @@ namespace WPEFramework {
             : _adminLock()
             , _notificationClients()
             , _pipeline(nullptr)
-            , _uridecodebin(nullptr)
+            , _source(nullptr)
+            , _decodebin(nullptr)
+            , _h264parse(nullptr)
+            , _videoQueue(nullptr)
+            , _videoSink(nullptr)
             , _audioQueue(nullptr)
             , _audioConvert(nullptr)
             , _audioResample(nullptr)
             , _audioSink(nullptr)
-            , _videoQueue(nullptr)
-            , _videoConvert(nullptr)
-            , _videoSink(nullptr)
             , _mainLoop(nullptr)
             , _mainLoopThread()
             , _busWatchId(0)
@@ -113,37 +114,44 @@ namespace WPEFramework {
             //
             // Pipeline topology:
             //
-            //   uridecodebin --[pad-added]--+--> videoQueue --> videoconvert --> westerossink
-            //                              \--> audioQueue --> audioconvert --> audioresample --> autoaudiosink
+            //   urisourcebin --[pad-added]--+--> h264parse --> videoQueue --> westerossink
+            //                              \--> decodebin --[pad-added]--> audioQueue --> audioconvert --> audioresample --> autoaudiosink
+            //
+            // WHY urisourcebin instead of uridecodebin?
+            //   urisourcebin exposes elementary streams (H.264, AAC, etc.) without
+            //   decoding them.  westerossink performs hardware H.264 decode internally,
+            //   so we feed it the compressed H.264 stream directly via h264parse.
+            //   The audio branch uses a software decodebin for AAC → PCM conversion.
+            //
+            // WHY h264parse?
+            //   Parses and bytestream-converts raw H.264 NAL units from urisourcebin
+            //   into the format westerossink expects.
             //
             // WHY queues?
-            //   uridecodebin pushes decoded buffers on its own streaming thread.
-            //   westerossink and autoaudiosink run on separate sink threads.
-            //   Without a queue between them, gst_pad_link() called from the
-            //   pad-added callback (streaming thread) races with the sink thread
-            //   and causes silent frame drops or deadlocks.
-            //   queue provides a thread-safe buffer between the two sides.
+            //   - videoQueue: decouples h264parse streaming thread from westerossink render thread.
+            //   - audioQueue: decouples decodebin streaming thread from autoaudiosink thread.
+            //   Without queues, dynamic pad linking from the pad-added callback can
+            //   race with sink threads, causing deadlocks or silent frame drops.
             //
-            // WHY videoconvert / audioconvert / audioresample?
-            //   uridecodebin outputs whatever format the decoder produces
-            //   (e.g. I420, NV12 for video; S16LE at 44100 Hz for audio).
-            //   westerossink and autoaudiosink advertise their own preferred
-            //   caps.  Without conversion elements, gst_pad_link() returns
-            //   GST_PAD_LINK_NOFORMAT (ret=-4) when the formats don't match.
+            // WHY audioconvert / audioresample?
+            //   decodebin outputs whatever PCM format the audio decoder produces.
+            //   audioconvert and audioresample adapt the format/rate so autoaudiosink
+            //   can accept the stream without a caps mismatch.
             // -----------------------------------------------------------------
 
             _pipeline      = gst_pipeline_new("gstreamer-player");
-            _uridecodebin  = gst_element_factory_make("uridecodebin",  "source");
+            _source        = gst_element_factory_make("urisourcebin",  "source");
+            _decodebin     = gst_element_factory_make("decodebin",     "decodebin");
+            _h264parse     = gst_element_factory_make("h264parse",     "h264parse");
             _videoQueue    = gst_element_factory_make("queue",         "videoqueue");
-            _videoConvert  = gst_element_factory_make("videoconvert",  "videoconvert");
-            _videoSink     = gst_element_factory_make("glimagesink",  "videosink");
+            _videoSink     = gst_element_factory_make("westerossink",  "videosink");
             _audioQueue    = gst_element_factory_make("queue",         "audioqueue");
             _audioConvert  = gst_element_factory_make("audioconvert",  "audioconvert");
             _audioResample = gst_element_factory_make("audioresample", "audioresample");
             _audioSink     = gst_element_factory_make("autoaudiosink", "audiosink");
 
-            if (!_pipeline || !_uridecodebin
-                           || !_videoQueue || !_videoConvert || !_videoSink
+            if (!_pipeline || !_source || !_decodebin || !_h264parse
+                           || !_videoQueue || !_videoSink
                            || !_audioQueue || !_audioConvert || !_audioResample || !_audioSink) {
                 LOGERR("GStreamerPlayer::Play: Failed to create one or more GStreamer elements");
                 DestroyPipeline();
@@ -152,19 +160,22 @@ namespace WPEFramework {
 
             // Add every element into the pipeline bin so it manages their lifetime.
             gst_bin_add_many(GST_BIN(_pipeline),
-                             _uridecodebin,
-                             _videoQueue, _videoConvert, _videoSink,
+                             _source,
+                             _decodebin,
+                             _h264parse,
+                             _videoQueue, _videoSink,
                              _audioQueue, _audioConvert, _audioResample, _audioSink,
                              nullptr);
 
             // Link the static chains.
-            // The uridecodebin -> queue links are made dynamically in OnPadAdded().
-            if (!gst_element_link_many(_videoQueue, _videoConvert, _videoSink, nullptr)) {
-                LOGERR("GStreamerPlayer::Play: Failed to link videoQueue -> videoconvert -> videosink");
+            // Dynamic links (source→h264parse and source→decodebin) are made in OnPadAdded().
+            // Dynamic link (decodebin→audioQueue) is made in OnDecodebinPadAdded().
+            if (!gst_element_link_many(_h264parse, _videoQueue, _videoSink, nullptr)) {
+                LOGERR("GStreamerPlayer::Play: Failed to link h264parse -> videoQueue -> westerossink");
                 DestroyPipeline();
                 return Core::ERROR_GENERAL;
             }
-            LOGINFO("GStreamerPlayer::Play: videoQueue -> videoconvert -> videosink linked successfully");
+            LOGINFO("GStreamerPlayer::Play: h264parse -> videoQueue -> westerossink linked successfully");
 
             if (!gst_element_link_many(_audioQueue, _audioConvert, _audioResample, _audioSink, nullptr)) {
                 LOGERR("GStreamerPlayer::Play: Failed to link audioQueue -> audioconvert -> audioresample -> autoaudiosink");
@@ -173,13 +184,18 @@ namespace WPEFramework {
             }
             LOGINFO("GStreamerPlayer::Play: audioQueue -> audioconvert -> audioresample -> autoaudiosink linked successfully");
 
-            // Tell uridecodebin which content to fetch.
-            g_object_set(_uridecodebin, "uri", uri.c_str(), nullptr);
+            // Tell urisourcebin which content to fetch.
+            g_object_set(_source, "uri", uri.c_str(), nullptr);
 
-            // When uridecodebin has decoded pads ready, OnPadAdded() will
-            // link them to the correct queue.
-            g_signal_connect(_uridecodebin, "pad-added",
+            // When urisourcebin exposes a new elementary-stream pad, OnPadAdded()
+            // routes video/x-h264 to h264parse and audio/* to decodebin.
+            g_signal_connect(_source, "pad-added",
                              G_CALLBACK(GStreamerPlayerImplementation::OnPadAdded), this);
+
+            // When decodebin finishes decoding an audio pad, OnDecodebinPadAdded()
+            // links audio/x-raw to audioQueue.
+            g_signal_connect(_decodebin, "pad-added",
+                             G_CALLBACK(GStreamerPlayerImplementation::OnDecodebinPadAdded), this);
 
             // Attach a bus watch so that GStreamer messages (ASYNC_DONE, ERROR, EOS)
             // are dispatched on the GMainLoop thread to OnBusMessage().
@@ -304,6 +320,14 @@ namespace WPEFramework {
          * it keeps the uridecodebin streaming thread decoupled from the sink
          * threads, preventing deadlocks and silent frame drops.
          */
+        /**
+         * Called by urisourcebin on its streaming thread whenever it exposes a new
+         * elementary-stream pad (before decoding).
+         *
+         * Routing:
+         *   video/x-h264  -->  h264parse  (westerossink performs hardware decode)
+         *   audio/*        -->  decodebin  (software decode to audio/x-raw)
+         */
         /* static */
         void GStreamerPlayerImplementation::OnPadAdded(
             GstElement* /* src */, GstPad* newPad, gpointer userData)
@@ -325,14 +349,14 @@ namespace WPEFramework {
             GstStructure* structure = gst_caps_get_structure(caps, 0);
             const gchar*  mediaType = gst_structure_get_name(structure);
 
-            GstElement* targetQueue = nullptr;
+            GstElement* targetElement = nullptr;
 
-            if (g_str_has_prefix(mediaType, "video/x-raw")) {
-                targetQueue = self->_videoQueue;
-                LOGINFO("GStreamerPlayer::OnPadAdded: linking video pad to videoQueue");
-            } else if (g_str_has_prefix(mediaType, "audio/x-raw")) {
-                targetQueue = self->_audioQueue;
-                LOGINFO("GStreamerPlayer::OnPadAdded: linking audio pad to audioQueue");
+            if (g_str_has_prefix(mediaType, "video/x-h264")) {
+                targetElement = self->_h264parse;
+                LOGINFO("GStreamerPlayer::OnPadAdded: linking video/x-h264 pad to h264parse");
+            } else if (g_str_has_prefix(mediaType, "audio/")) {
+                targetElement = self->_decodebin;
+                LOGINFO("GStreamerPlayer::OnPadAdded: linking audio pad to decodebin");
             } else {
                 // Unknown / unsupported pad type – skip it.
                 LOGINFO("GStreamerPlayer::OnPadAdded: skipping pad with type '%s'", mediaType);
@@ -340,9 +364,9 @@ namespace WPEFramework {
                 return;
             }
 
-            // Link newPad to the queue's sink pad (unless already linked).
-            GstPad* sinkPad = gst_element_get_static_pad(targetQueue, "sink");
-            if (!gst_pad_is_linked(sinkPad)) {
+            // Link newPad to the element's sink pad (unless already linked).
+            GstPad* sinkPad = gst_element_get_static_pad(targetElement, "sink");
+            if (sinkPad && !gst_pad_is_linked(sinkPad)) {
                 GstPadLinkReturn linkRet = gst_pad_link(newPad, sinkPad);
                 if (linkRet != GST_PAD_LINK_OK) {
                     LOGERR("GStreamerPlayer::OnPadAdded: pad link failed for type '%s' (ret=%d)",
@@ -350,7 +374,51 @@ namespace WPEFramework {
                 }
             }
 
-            gst_object_unref(sinkPad);
+            if (sinkPad) gst_object_unref(sinkPad);
+            gst_caps_unref(caps);
+        }
+
+        /**
+         * Called by decodebin on its streaming thread whenever it finishes decoding
+         * a pad and exposes raw audio.
+         *
+         * Links audio/x-raw to audioQueue, which decouples decodebin’s streaming
+         * thread from the autoaudiosink thread.
+         */
+        /* static */
+        void GStreamerPlayerImplementation::OnDecodebinPadAdded(
+            GstElement* /* src */, GstPad* newPad, gpointer userData)
+        {
+            GStreamerPlayerImplementation* self =
+                static_cast<GStreamerPlayerImplementation*>(userData);
+
+            GstCaps* caps = gst_pad_get_current_caps(newPad);
+            if (!caps) {
+                caps = gst_pad_query_caps(newPad, nullptr);
+            }
+            if (!caps) {
+                LOGERR("GStreamerPlayer::OnDecodebinPadAdded: could not determine caps");
+                return;
+            }
+
+            GstStructure* structure = gst_caps_get_structure(caps, 0);
+            const gchar*  mediaType = gst_structure_get_name(structure);
+
+            if (g_str_has_prefix(mediaType, "audio/x-raw")) {
+                LOGINFO("GStreamerPlayer::OnDecodebinPadAdded: linking audio/x-raw to audioQueue");
+                GstPad* sinkPad = gst_element_get_static_pad(self->_audioQueue, "sink");
+                if (sinkPad && !gst_pad_is_linked(sinkPad)) {
+                    GstPadLinkReturn linkRet = gst_pad_link(newPad, sinkPad);
+                    if (linkRet != GST_PAD_LINK_OK) {
+                        LOGERR("GStreamerPlayer::OnDecodebinPadAdded: audio pad link failed (ret=%d)",
+                               static_cast<int>(linkRet));
+                    }
+                }
+                if (sinkPad) gst_object_unref(sinkPad);
+            } else {
+                LOGINFO("GStreamerPlayer::OnDecodebinPadAdded: skipping pad with type '%s'", mediaType);
+            }
+
             gst_caps_unref(caps);
         }
 
@@ -379,9 +447,10 @@ namespace WPEFramework {
 
                 // These pointers were owned by the pipeline – null them out so
                 // we don't accidentally dereference them.
-                _uridecodebin  = nullptr;
+                _source        = nullptr;
+                _decodebin     = nullptr;
+                _h264parse     = nullptr;
                 _videoQueue    = nullptr;
-                _videoConvert  = nullptr;
                 _videoSink     = nullptr;
                 _audioQueue    = nullptr;
                 _audioConvert  = nullptr;

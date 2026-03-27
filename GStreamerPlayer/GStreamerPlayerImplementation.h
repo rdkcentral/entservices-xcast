@@ -24,21 +24,22 @@
  * This class runs in a separate WPEProcess host.  It owns a manually built
  * GStreamer pipeline:
  *
- *   uridecodebin --[pad-added]--> videoqueue --> westerossink
- *                              -> audioqueue --> autoaudiosink
+ *   urisourcebin --[pad-added]--+--> h264parse --> videoQueue --> westerossink
+ *                               \--> decodebin --[pad-added]--> audioQueue --> audioconvert --> audioresample --> autoaudiosink
  *
  * The GMainLoop runs in its own thread so that GStreamer can dispatch bus
  * messages (errors, EOS, state-changes) without blocking the COM-RPC thread.
  *
  * Pipeline topology:
  *
- *   uridecodebin --[pad-added]--+--> queue --> videoconvert --> westerossink
- *                               \--> queue --> audioconvert --> audioresample --> autoaudiosink
+ *   urisourcebin --[pad-added]--+--> h264parse --> videoQueue --> westerossink
+ *                               \--> decodebin --[pad-added]--> audioQueue --> audioconvert --> audioresample --> autoaudiosink
  *
- * queue elements decouple the uridecodebin streaming thread from the sink
- * threads, preventing deadlocks during dynamic pad linking.
- * videoconvert / audioconvert / audioresample bridge pixel-format and
- * sample-rate mismatches between uridecodebin and the sinks.
+ * urisourcebin exposes elementary streams (H.264, AAC) without decoding.
+ * westerossink performs hardware H.264 decode; h264parse feeds it the bitstream.
+ * decodebin software-decodes compressed audio to PCM (audio/x-raw).
+ * Queue elements decouple streaming threads from sink threads, preventing
+ * deadlocks during dynamic pad linking.
  */
 
 #pragma once
@@ -81,9 +82,13 @@ namespace WPEFramework {
             Core::hresult Stop() override;
 
         private:
-            // GStreamer callback: called whenever uridecodebin exposes a new decoded pad.
-            // We inspect the pad caps and link it directly to videoconvert or audioconvert.
+            // GStreamer callback: called by urisourcebin when it exposes a new elementary-stream
+            // pad.  Routes video/x-h264 to h264parse and audio/* to decodebin.
             static void OnPadAdded(GstElement* src, GstPad* newPad, gpointer userData);
+
+            // GStreamer callback: called by decodebin when it exposes a decoded audio pad.
+            // Links audio/x-raw to audioQueue.
+            static void OnDecodebinPadAdded(GstElement* src, GstPad* newPad, gpointer userData);
 
             // GStreamer bus watch: dispatches pipeline messages (ASYNC_DONE, ERROR, EOS)
             // from the GMainLoop thread to the appropriate notification handler.
@@ -105,15 +110,16 @@ namespace WPEFramework {
             // All element pointers below are owned by _pipeline (via gst_bin_add_many).
             // After gst_object_unref(_pipeline) they become dangling; we NULL them out
             // immediately in DestroyPipeline().
-            GstElement* _pipeline;      // top-level GstPipeline
-            GstElement* _uridecodebin;  // decodes any URI; emits pad-added signals
-            GstElement* _audioQueue;    // decouples streaming thread from audio sink thread
-            GstElement* _audioConvert;  // converts any audio format for autoaudiosink
-            GstElement* _audioResample; // resamples to the rate autoaudiosink requires
-            GstElement* _audioSink;     // autoaudiosink: picks the best audio output
-            GstElement* _videoQueue;    // decouples streaming thread from video sink thread
-            GstElement* _videoConvert;  // converts any pixel format for westerossink
-            GstElement* _videoSink;     // westerossink: renders video via Westeros
+            GstElement* _pipeline;       // top-level GstPipeline
+            GstElement* _source;         // urisourcebin: fetches URI; emits pad-added for elementary streams
+            GstElement* _decodebin;      // decodebin: software-decodes compressed audio; emits pad-added for audio/x-raw
+            GstElement* _h264parse;      // h264parse: parses H.264 bitstream for westerossink
+            GstElement* _videoQueue;     // decouples h264parse streaming thread from westerossink thread
+            GstElement* _videoSink;      // westerossink: hardware H.264 decode + render via Westeros
+            GstElement* _audioQueue;     // decouples decodebin streaming thread from audio sink thread
+            GstElement* _audioConvert;   // converts PCM format for autoaudiosink
+            GstElement* _audioResample;  // resamples to the rate autoaudiosink requires
+            GstElement* _audioSink;      // autoaudiosink: picks the best audio output
 
             // --- GMainLoop for bus messages ---
             // GStreamer dispatches errors, EOS and state-change messages on this loop.
