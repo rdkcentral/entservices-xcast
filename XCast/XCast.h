@@ -104,19 +104,19 @@ namespace WPEFramework {
 							
 						virtual void Activated(RPC::IRemoteConnection *connection) final
 						{
+							LOGINFO("XCast Notification Activated - Connection Id: %u, Parent Connection Id: %u", connection->Id(), _parent._connectionId);
 							if(_parent._connectionId == connection->Id())
 							{
 								LOGINFO("XCast Notification Activated");
-								LOGINFO("XCast Notification Activated - Connection Id: %u, Parent Connection Id: %u", connection->Id(), _parent._connectionId);
 							}
 						}
 		
 						virtual void Deactivated(RPC::IRemoteConnection *connection) final
 						{
+							LOGINFO("XCast Notification Deactivated - Connection Id: %u, Parent Connection Id: %u", connection->Id(), _parent._connectionId);
 							if(_parent._connectionId == connection->Id())
 							{
 								LOGINFO("XCast Notification Deactivated");
-								LOGINFO("XCast Notification Deactivated - Connection Id: %u, Parent Connection Id: %u", connection->Id(), _parent._connectionId);
 								_parent.Deactivated(connection);
 							}
 						}
