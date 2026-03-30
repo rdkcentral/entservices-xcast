@@ -107,6 +107,7 @@ namespace WPEFramework {
 							if(_parent._connectionId == connection->Id())
 							{
 								LOGINFO("XCast Notification Activated");
+								LOGINFO("OCIContainer Notification Activated - Connection Id: %u, Parent Connection Id: %u", connection->Id(), _parent._connectionId);
 							}
 						}
 		
@@ -115,6 +116,7 @@ namespace WPEFramework {
 							if(_parent._connectionId == connection->Id())
 							{
 								LOGINFO("XCast Notification Deactivated");
+								LOGINFO("OCIContainer Notification Deactivated - Connection Id: %u, Parent Connection Id: %u", connection->Id(), _parent._connectionId);
 								_parent.Deactivated(connection);
 							}
 						}
