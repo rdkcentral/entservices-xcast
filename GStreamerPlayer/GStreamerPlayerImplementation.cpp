@@ -187,6 +187,20 @@ namespace WPEFramework {
             // Tell urisourcebin which content to fetch.
             g_object_set(_source, "uri", uri.c_str(), nullptr);
 
+                        // Tell urisourcebin which content to fetch, and enable its internal
+            // parsebin so it demuxes the container and exposes elementary-stream
+            // pads (video/x-h264, audio/mpeg, etc.) rather than the raw container
+            // stream (video/webm, video/quicktime, etc.).
+            //
+            // Without parse-streams=TRUE, urisourcebin outputs a single pad carrying
+            // the whole container bytestream (e.g. "video/webm").  OnPadAdded skips
+            // unknown types, leaving that source pad unlinked.  GstSoupHTTPSrc then
+            // fails with "Internal data stream error" because it has nowhere to push
+            // its buffers.  parse-streams=TRUE routes data through a GstParsebin
+            // child which absorbs all produced pads, so partial linking (e.g. only
+            // audio when video is VP8) no longer stalls the source.
+            //g_object_set(_source, "uri", uri.c_str(), "parse-streams", TRUE, nullptr);
+
             // When urisourcebin exposes a new elementary-stream pad, OnPadAdded()
             // routes video/x-h264 to h264parse and audio/* to decodebin.
             g_signal_connect(_source, "pad-added",
@@ -326,7 +340,7 @@ namespace WPEFramework {
          *
          * Routing:
          *   video/x-h264  -->  h264parse  (westerossink performs hardware decode)
-         *   audio/*        -->  decodebin  (software decode to audio/x-raw)
+         *   audio/...     -->  decodebin  (software decode to audio/x-raw)
          */
         /* static */
         void GStreamerPlayerImplementation::OnPadAdded(
@@ -335,47 +349,29 @@ namespace WPEFramework {
             GStreamerPlayerImplementation* self =
                 static_cast<GStreamerPlayerImplementation*>(userData);
 
-            // gst_pad_get_current_caps() can return NULL if caps are not yet
-            // finalized when pad-added fires; fall back to querying allowed caps.
-            GstCaps* caps = gst_pad_get_current_caps(newPad);
-            if (!caps) {
-                caps = gst_pad_query_caps(newPad, nullptr);
-            }
-            if (!caps) {
-                LOGERR("GStreamerPlayer::OnPadAdded: could not determine caps for new pad");
-                return;
-            }
+            gchar* padName = gst_pad_get_name(newPad);
+            LOGINFO("GStreamerPlayer::OnPadAdded: pad added: %s", padName);
 
-            GstStructure* structure = gst_caps_get_structure(caps, 0);
-            const gchar*  mediaType = gst_structure_get_name(structure);
+            // Try linking to h264parse first (video path).
+            GstPad* h264SinkPad = gst_element_get_static_pad(self->_h264parse, "sink");
+            GstPadLinkReturn ret = gst_pad_link(newPad, h264SinkPad);
 
-            GstElement* targetElement = nullptr;
-
-            if (g_str_has_prefix(mediaType, "video/x-h264")) {
-                targetElement = self->_h264parse;
-                LOGINFO("GStreamerPlayer::OnPadAdded: linking video/x-h264 pad to h264parse");
-            } else if (g_str_has_prefix(mediaType, "audio/")) {
-                targetElement = self->_decodebin;
-                LOGINFO("GStreamerPlayer::OnPadAdded: linking audio pad to decodebin");
+            if (ret == GST_PAD_LINK_OK) {
+                LOGINFO("GStreamerPlayer::OnPadAdded: linked pad '%s' to h264parse", padName);
             } else {
-                // Unknown / unsupported pad type – skip it.
-                LOGINFO("GStreamerPlayer::OnPadAdded: skipping pad with type '%s'", mediaType);
-                gst_caps_unref(caps);
-                return;
-            }
-
-            // Link newPad to the element's sink pad (unless already linked).
-            GstPad* sinkPad = gst_element_get_static_pad(targetElement, "sink");
-            if (sinkPad && !gst_pad_is_linked(sinkPad)) {
-                GstPadLinkReturn linkRet = gst_pad_link(newPad, sinkPad);
-                if (linkRet != GST_PAD_LINK_OK) {
-                    LOGERR("GStreamerPlayer::OnPadAdded: pad link failed for type '%s' (ret=%d)",
-                           mediaType, static_cast<int>(linkRet));
+                // Fall back to audio path via decodebin.
+                GstPad* audioSinkPad = gst_element_get_static_pad(self->_decodebin, "sink");
+                ret = gst_pad_link(newPad, audioSinkPad);
+                if (ret == GST_PAD_LINK_OK) {
+                    LOGINFO("GStreamerPlayer::OnPadAdded: linked pad '%s' to decodebin", padName);
+                } else {
+                    LOGERR("GStreamerPlayer::OnPadAdded: failed to link pad '%s'", padName);
                 }
+                gst_object_unref(audioSinkPad);
             }
 
-            if (sinkPad) gst_object_unref(sinkPad);
-            gst_caps_unref(caps);
+            gst_object_unref(h264SinkPad);
+            g_free(padName);
         }
 
         /**
