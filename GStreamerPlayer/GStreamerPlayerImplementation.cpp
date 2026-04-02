@@ -312,28 +312,48 @@ namespace WPEFramework {
             GstStructure* structure = gst_caps_get_structure(caps, 0);
             const gchar*  mediaType = gst_structure_get_name(structure);
 
+            // Log the full caps string so we can see the exact format/resolution/framerate.
+            gchar* capsStr = gst_caps_to_string(caps);
+            LOGINFO("GStreamerPlayer::OnPadAdded: new pad type='%s' full-caps='%s'",
+                    mediaType, capsStr ? capsStr : "(null)");
+            g_free(capsStr);
+
             GstElement* targetQueue = nullptr;
+            const gchar* targetName = nullptr;
 
             if (g_str_has_prefix(mediaType, "video/x-raw")) {
                 targetQueue = self->_videoQueue;
-                LOGINFO("GStreamerPlayer::OnPadAdded: linking video pad to videoQueue");
+                targetName  = "videoQueue";
             } else if (g_str_has_prefix(mediaType, "audio/x-raw")) {
                 targetQueue = self->_audioQueue;
-                LOGINFO("GStreamerPlayer::OnPadAdded: linking audio pad to audioQueue");
+                targetName  = "audioQueue";
             } else {
                 // Unknown / unsupported pad type – skip it.
-                LOGINFO("GStreamerPlayer::OnPadAdded: skipping pad with type '%s'", mediaType);
+                LOGINFO("GStreamerPlayer::OnPadAdded: skipping unsupported pad type '%s'", mediaType);
                 gst_caps_unref(caps);
                 return;
             }
 
             // Link newPad to the queue's sink pad (unless already linked).
             GstPad* sinkPad = gst_element_get_static_pad(targetQueue, "sink");
-            if (!gst_pad_is_linked(sinkPad)) {
+            if (!sinkPad) {
+                LOGERR("GStreamerPlayer::OnPadAdded: could not get sink pad from %s", targetName);
+                gst_caps_unref(caps);
+                return;
+            }
+
+            if (gst_pad_is_linked(sinkPad)) {
+                LOGINFO("GStreamerPlayer::OnPadAdded: %s sink pad already linked, skipping", targetName);
+            } else {
                 GstPadLinkReturn linkRet = gst_pad_link(newPad, sinkPad);
-                if (linkRet != GST_PAD_LINK_OK) {
-                    LOGERR("GStreamerPlayer::OnPadAdded: pad link failed for type '%s' (ret=%d)",
-                           mediaType, static_cast<int>(linkRet));
+                if (linkRet == GST_PAD_LINK_OK) {
+                    LOGINFO("GStreamerPlayer::OnPadAdded: successfully linked '%s' pad to %s (ret=%d)",
+                            mediaType, targetName, static_cast<int>(linkRet));
+                } else {
+                    LOGERR("GStreamerPlayer::OnPadAdded: FAILED to link '%s' pad to %s (ret=%d) – "
+                           "ret meanings: -1=wrong hierarchy, -2=was linked, -3=wrong direction, "
+                           "-4=no format match, -5=no peer, -6=refused",
+                           mediaType, targetName, static_cast<int>(linkRet));
                 }
             }
 
