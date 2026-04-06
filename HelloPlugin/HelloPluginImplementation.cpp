@@ -68,7 +68,7 @@ namespace WPEFramework {
             _adminLock.Unlock();
 
             return Core::ERROR_NONE;
-        }
+        } //end of Unregister
 
         Core::hresult HelloPluginImplementation::GetGreeting(string& message)
         {
