@@ -18,6 +18,8 @@
  */
 
 #include "GStreamerPlayerImplementation.h"
+#include <cstdlib>
+#include <cstring>
 
 namespace WPEFramework {
     namespace Plugin {
@@ -46,10 +48,33 @@ namespace WPEFramework {
             , _mainLoopThread()
             , _busWatchId(0)
         {
-             // Set environment variables for Wayland/Westeros
-            setenv("XDG_RUNTIME_DIR", "/tmp", 1);
-            setenv("WAYLAND_DISPLAY", "main0", 1);
-            SYSLOG(Logging::Startup, (_T("GStreamerPlayerImplementation: Environment variables set - XDG_RUNTIME_DIR=/tmp, WAYLAND_DISPLAY=main0")));
+            // Check and log current environment variables before setting
+            const char* xdgBefore = getenv("XDG_RUNTIME_DIR");
+            const char* waylandBefore = getenv("WAYLAND_DISPLAY");
+            SYSLOG(Logging::Startup, (_T("GStreamerPlayerImplementation: BEFORE - XDG_RUNTIME_DIR=%s, WAYLAND_DISPLAY=%s"), 
+                xdgBefore ? xdgBefore : "NULL", waylandBefore ? waylandBefore : "NULL"));
+
+            // Set environment variables for Wayland/Westeros
+            int xdgResult = setenv("XDG_RUNTIME_DIR", "/tmp", 1);
+            int waylandResult = setenv("WAYLAND_DISPLAY", "main0", 1);
+            
+            // Verify environment variables were actually set
+            const char* xdgAfter = getenv("XDG_RUNTIME_DIR");
+            const char* waylandAfter = getenv("WAYLAND_DISPLAY");
+            
+            if (xdgResult == 0 && xdgAfter != nullptr && strcmp(xdgAfter, "/tmp") == 0) {
+                SYSLOG(Logging::Startup, (_T("GStreamerPlayerImplementation: ✓ XDG_RUNTIME_DIR set successfully to: %s"), xdgAfter));
+            } else {
+                SYSLOG(Logging::Error, (_T("GStreamerPlayerImplementation: ✗ Failed to set XDG_RUNTIME_DIR (setenv result=%d, actual value=%s)"), 
+                    xdgResult, xdgAfter ? xdgAfter : "NULL"));
+            }
+            
+            if (waylandResult == 0 && waylandAfter != nullptr && strcmp(waylandAfter, "main0") == 0) {
+                SYSLOG(Logging::Startup, (_T("GStreamerPlayerImplementation: ✓ WAYLAND_DISPLAY set successfully to: %s"), waylandAfter));
+            } else {
+                SYSLOG(Logging::Error, (_T("GStreamerPlayerImplementation: ✗ Failed to set WAYLAND_DISPLAY (setenv result=%d, actual value=%s)"), 
+                    waylandResult, waylandAfter ? waylandAfter : "NULL"));
+            }
 
             // Stop active sky services (excluding sky-drop)
             int ret = system("systemctl list-units --type=service --state=active --no-pager --no-legend 'sky*.service' | awk '{print $1}' | grep -v '^sky-drop' | xargs -r systemctl stop");
