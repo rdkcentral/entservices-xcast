@@ -157,7 +157,7 @@ namespace WPEFramework {
             _uridecodebin  = gst_element_factory_make("uridecodebin",  "source");
             _videoQueue    = gst_element_factory_make("queue",         "videoqueue");
             _videoConvert  = gst_element_factory_make("videoconvert",  "videoconvert");
-            _videoSink     = gst_element_factory_make("waylandsink",  "videosink");
+            _videoSink     = gst_element_factory_make("autovideosink",  "videosink");
             _audioQueue    = gst_element_factory_make("queue",         "audioqueue");
             _audioConvert  = gst_element_factory_make("audioconvert",  "audioconvert");
             _audioResample = gst_element_factory_make("audioresample", "audioresample");
