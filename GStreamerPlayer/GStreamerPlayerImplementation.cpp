@@ -63,9 +63,9 @@ namespace WPEFramework {
             const char* waylandAfter = getenv("WAYLAND_DISPLAY");
             
             if (xdgResult == 0 && xdgAfter != nullptr && strcmp(xdgAfter, "/tmp") == 0) {
-                SYSLOG(Logging::Startup, (_T("GStreamerPlayerImplementation: ✓ XDG_RUNTIME_DIR set successfully to: %s"), xdgAfter));
+                SYSLOG(Logging::Startup, (_T("GStreamerPlayerImplementation:  XDG_RUNTIME_DIR set successfully to: %s"), xdgAfter));
             } else {
-                SYSLOG(Logging::Error, (_T("GStreamerPlayerImplementation: ✗ Failed to set XDG_RUNTIME_DIR (setenv result=%d, actual value=%s)"), 
+                SYSLOG(Logging::Error, (_T("GStreamerPlayerImplementation:  Failed to set XDG_RUNTIME_DIR (setenv result=%d, actual value=%s)"), 
                     xdgResult, xdgAfter ? xdgAfter : "NULL"));
             }
             
@@ -74,22 +74,6 @@ namespace WPEFramework {
             } else {
                 SYSLOG(Logging::Error, (_T("GStreamerPlayerImplementation: ✗ Failed to set WAYLAND_DISPLAY (setenv result=%d, actual value=%s)"), 
                     waylandResult, waylandAfter ? waylandAfter : "NULL"));
-            }
-
-            // Stop active sky services (excluding sky-drop)
-            int ret = system("systemctl list-units --type=service --state=active --no-pager --no-legend 'sky*.service' | awk '{print $1}' | grep -v '^sky-drop' | xargs -r systemctl stop");
-            if (ret == 0) {
-                SYSLOG(Logging::Startup, (_T("GStreamerPlayerImplementation: Sky services stopped successfully")));
-            } else {
-                SYSLOG(Logging::Error, (_T("GStreamerPlayerImplementation: Failed to stop sky services (ret=%d)"), ret));
-            }
-
-            // Launch Westeros compositor in the background
-            ret = system("LD_PRELOAD=/usr/lib/libwesteros_gl.so.0.0.0 westeros --renderer libwesteros_render_embedded.so.0.0.0 --display main0 --embedded --window-size 1920x1080 --noFBO &");
-            if (ret == 0) {
-                SYSLOG(Logging::Startup, (_T("GStreamerPlayerImplementation: Westeros compositor launched successfully")));
-            } else {
-                SYSLOG(Logging::Error, (_T("GStreamerPlayerImplementation: Failed to launch Westeros compositor (ret=%d)"), ret));
             }
 
             // Initialise GStreamer once for this process.
