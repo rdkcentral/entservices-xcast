@@ -55,7 +55,7 @@ Load and play media from the given URI. Builds a GStreamer pipeline internally: 
 
 # curl -d '{"jsonrpc":"2.0","id":10,"method":"org.rdk.GStreamerPlayer.1.play","params":{"uri":"https://gstreamer.freedesktop.org/data/media/sintel_trailer-480p.webm"}}' http://127.0.0.1:9998/jsonrpc
 1. Play Local File (Standard Format)
-curl -d '{"jsonrpc":"2.0","id":10,"method":"org.rdk.GStreamerPlayer.1.play","params":{"uri":"file:///opt/rev/video"}}' http://127.0.0.1:9998/jsonrpc
+curl -d '{"jsonrpc":"2.0","id":10,"method":"org.rdk.GStreamerPlayer.1.play","params":{"uri":"file:///opt/rev/mov_bbb.mp4"}}' http://127.0.0.1:9998/jsonrpc
 
 2. Play Local File (Alternative - Direct Path)
 curl -d '{"jsonrpc":"2.0","id":10,"method":"org.rdk.GStreamerPlayer.1.play","params":{"uri":"/opt/rev/video"}}' http://127.0.0.1:9998/jsonrpc

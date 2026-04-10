@@ -20,6 +20,8 @@
 #include "GStreamerPlayerImplementation.h"
 #include <cstdlib>
 #include <cstring>
+#include <sys/stat.h>
+#include <unistd.h>
 
 namespace WPEFramework {
     namespace Plugin {
@@ -59,15 +61,19 @@ namespace WPEFramework {
             // Set environment variables for Wayland/Westeros
             int xdgResult = setenv("XDG_RUNTIME_DIR", "/tmp", 1);
             int waylandResult = setenv("WAYLAND_DISPLAY", "main0", 1);
+            int dmabufResult = setenv("WESTEROS_SINK_AMLOGIC_USE_DMABUF", "1", 1);
+            int freerunResult = setenv("WESTEROS_SINK_USE_FREERUN", "1", 1);
             
             // Verify environment variables were actually set
             const char* xdgAfter = getenv("XDG_RUNTIME_DIR");
             const char* waylandAfter = getenv("WAYLAND_DISPLAY");
+            const char* dmabufAfter = getenv("WESTEROS_SINK_AMLOGIC_USE_DMABUF");
+            const char* freerunAfter = getenv("WESTEROS_SINK_USE_FREERUN");
             
             if (xdgResult == 0 && xdgAfter != nullptr && strcmp(xdgAfter, "/tmp") == 0) {
-                SYSLOG(Logging::Startup, (_T("GStreamerPlayerImplementation:  XDG_RUNTIME_DIR set successfully to: %s"), xdgAfter));
+                SYSLOG(Logging::Startup, (_T("GStreamerPlayerImplementation: ✓ XDG_RUNTIME_DIR set successfully to: %s"), xdgAfter));
             } else {
-                SYSLOG(Logging::Error, (_T("GStreamerPlayerImplementation:  Failed to set XDG_RUNTIME_DIR (setenv result=%d, actual value=%s)"), 
+                SYSLOG(Logging::Error, (_T("GStreamerPlayerImplementation: ✗ Failed to set XDG_RUNTIME_DIR (setenv result=%d, actual value=%s)"), 
                     xdgResult, xdgAfter ? xdgAfter : "NULL"));
             }
             
@@ -76,6 +82,52 @@ namespace WPEFramework {
             } else {
                 SYSLOG(Logging::Error, (_T("GStreamerPlayerImplementation: ✗ Failed to set WAYLAND_DISPLAY (setenv result=%d, actual value=%s)"), 
                     waylandResult, waylandAfter ? waylandAfter : "NULL"));
+            }
+            
+            if (dmabufResult == 0 && dmabufAfter != nullptr && strcmp(dmabufAfter, "1") == 0) {
+                SYSLOG(Logging::Startup, (_T("GStreamerPlayerImplementation: ✓ WESTEROS_SINK_AMLOGIC_USE_DMABUF set successfully to: %s"), dmabufAfter));
+            } else {
+                SYSLOG(Logging::Error, (_T("GStreamerPlayerImplementation: ✗ Failed to set WESTEROS_SINK_AMLOGIC_USE_DMABUF (setenv result=%d, actual value=%s)"), 
+                    dmabufResult, dmabufAfter ? dmabufAfter : "NULL"));
+            }
+            
+            if (freerunResult == 0 && freerunAfter != nullptr && strcmp(freerunAfter, "1") == 0) {
+                SYSLOG(Logging::Startup, (_T("GStreamerPlayerImplementation: ✓ WESTEROS_SINK_USE_FREERUN set successfully to: %s"), freerunAfter));
+            } else {
+                SYSLOG(Logging::Error, (_T("GStreamerPlayerImplementation: ✗ Failed to set WESTEROS_SINK_USE_FREERUN (setenv result=%d, actual value=%s)"), 
+                    freerunResult, freerunAfter ? freerunAfter : "NULL"));
+            }
+
+            // Check if Westeros compositor is already running by checking for the Wayland socket
+            struct stat socketStat;
+            bool westerosRunning = (stat("/tmp/main0", &socketStat) == 0);
+            
+            if (westerosRunning) {
+                SYSLOG(Logging::Startup, (_T("GStreamerPlayerImplementation: ✓ Westeros compositor already running (socket /tmp/main0 exists)")));
+            } else {
+                SYSLOG(Logging::Startup, (_T("GStreamerPlayerImplementation: ⚠️  Westeros compositor NOT running - attempting to start it...")));
+                
+                // Start Westeros compositor in background
+                // Note: This uses system() which may block briefly, but the & makes it background
+                int sysResult = system("LD_PRELOAD=/usr/lib/libwesteros_gl.so.0.0.0 westeros "
+                                      "--renderer libwesteros_render_embedded.so.0.0.0 "
+                                      "--display main0 --embedded --window-size 1920x1080 --noFBO "
+                                      ">/dev/null 2>&1 &");
+                
+                if (sysResult == 0) {
+                    // Give Westeros a moment to start and create the socket
+                    usleep(500000); // 500ms delay
+                    
+                    // Verify it started by checking socket again
+                    if (stat("/tmp/main0", &socketStat) == 0) {
+                        SYSLOG(Logging::Startup, (_T("GStreamerPlayerImplementation: ✓ Westeros compositor started successfully")));
+                    } else {
+                        SYSLOG(Logging::Error, (_T("GStreamerPlayerImplementation: ✗ Westeros started but socket not found - video may not work!")));
+                    }
+                } else {
+                    SYSLOG(Logging::Error, (_T("GStreamerPlayerImplementation: ✗ Failed to start Westeros compositor (system() returned %d)"), sysResult));
+                    SYSLOG(Logging::Error, (_T("GStreamerPlayerImplementation: ⚠️  Manual start required: LD_PRELOAD=/usr/lib/libwesteros_gl.so.0.0.0 westeros --renderer libwesteros_render_embedded.so.0.0.0 --display main0 --embedded --window-size 1920x1080 --noFBO &")));
+                }
             }
 
             // Initialise GStreamer once for this process.
