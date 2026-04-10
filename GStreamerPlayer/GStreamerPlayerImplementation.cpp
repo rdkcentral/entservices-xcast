@@ -331,7 +331,7 @@ namespace WPEFramework {
          *
          * We check the pad's media type and link to the correct element:
          *  - "video/x-h264" -> h264parser sink pad
-         *  - "audio/*" -> decodebin sink pad
+         *  - "audio/..." -> decodebin sink pad (any audio format)
          */
         /* static */
         void GStreamerPlayerImplementation::OnPadAdded(
