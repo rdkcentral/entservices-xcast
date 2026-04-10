@@ -36,14 +36,16 @@ namespace WPEFramework {
             : _adminLock()
             , _notificationClients()
             , _pipeline(nullptr)
-            , _uridecodebin(nullptr)
-            , _audioQueue(nullptr)
+            , _source(nullptr)
+            , _demuxer(nullptr)
+            , _h264parser(nullptr)
+            , _videoQueue(nullptr)
+            , _videoSink(nullptr)
+            , _decodebin(nullptr)
             , _audioConvert(nullptr)
             , _audioResample(nullptr)
+            , _audioQueue(nullptr)
             , _audioSink(nullptr)
-            , _videoQueue(nullptr)
-            , _videoConvert(nullptr)
-            , _videoSink(nullptr)
             , _mainLoop(nullptr)
             , _mainLoopThread()
             , _busWatchId(0)
@@ -143,38 +145,33 @@ namespace WPEFramework {
             //
             // Pipeline topology:
             //
-            //   uridecodebin --[pad-added]--+--> videoQueue --> videoconvert --> westerossink
-            //                              \--> audioQueue --> audioconvert --> audioresample --> autoaudiosink
+            //   filesrc -> qtdemux --[pad-added]--+--> h264parse -> video_queue -> westerossink
+            //                                     \--> decodebin --[pad-added]--> audioconvert -> audioresample -> audio_queue -> autoaudiosink
             //
             // WHY queues?
-            //   uridecodebin pushes decoded buffers on its own streaming thread.
+            //   qtdemux and decodebin push buffers on their own streaming threads.
             //   westerossink and autoaudiosink run on separate sink threads.
             //   Without a queue between them, gst_pad_link() called from the
             //   pad-added callback (streaming thread) races with the sink thread
             //   and causes silent frame drops or deadlocks.
             //   queue provides a thread-safe buffer between the two sides.
-            //
-            // WHY videoconvert / audioconvert / audioresample?
-            //   uridecodebin outputs whatever format the decoder produces
-            //   (e.g. I420, NV12 for video; S16LE at 44100 Hz for audio).
-            //   westerossink and autoaudiosink advertise their own preferred
-            //   caps.  Without conversion elements, gst_pad_link() returns
-            //   GST_PAD_LINK_NOFORMAT (ret=-4) when the formats don't match.
             // -----------------------------------------------------------------
 
             _pipeline      = gst_pipeline_new("gstreamer-player");
-            _uridecodebin  = gst_element_factory_make("uridecodebin",  "source");
-            _videoQueue    = gst_element_factory_make("queue",         "videoqueue");
-            _videoConvert  = gst_element_factory_make("videoconvert",  "videoconvert");
-            _videoSink     = gst_element_factory_make("autovideosink",  "videosink");
-            _audioQueue    = gst_element_factory_make("queue",         "audioqueue");
-            _audioConvert  = gst_element_factory_make("audioconvert",  "audioconvert");
-            _audioResample = gst_element_factory_make("audioresample", "audioresample");
-            _audioSink     = gst_element_factory_make("autoaudiosink", "audiosink");
+            _source        = gst_element_factory_make("filesrc",        "source");
+            _demuxer       = gst_element_factory_make("qtdemux",        "demuxer");
+            _h264parser    = gst_element_factory_make("h264parse",      "h264parser");
+            _videoQueue    = gst_element_factory_make("queue",          "video_queue");
+            _videoSink     = gst_element_factory_make("westerossink",   "videosink");
+            _decodebin     = gst_element_factory_make("decodebin",      "decodebin");
+            _audioConvert  = gst_element_factory_make("audioconvert",   "audioconvert");
+            _audioResample = gst_element_factory_make("audioresample",  "audioresample");
+            _audioQueue    = gst_element_factory_make("queue",          "audio_queue");
+            _audioSink     = gst_element_factory_make("autoaudiosink",  "audiosink");
 
-            if (!_pipeline || !_uridecodebin
-                           || !_videoQueue || !_videoConvert || !_videoSink
-                           || !_audioQueue || !_audioConvert || !_audioResample || !_audioSink) {
+            if (!_pipeline || !_source || !_demuxer
+                           || !_h264parser || !_videoQueue || !_videoSink
+                           || !_decodebin || !_audioConvert || !_audioResample || !_audioQueue || !_audioSink) {
                 LOGERR("GStreamerPlayer::Play: Failed to create one or more GStreamer elements");
                 DestroyPipeline();
                 return Core::ERROR_GENERAL;
@@ -182,34 +179,54 @@ namespace WPEFramework {
 
             // Add every element into the pipeline bin so it manages their lifetime.
             gst_bin_add_many(GST_BIN(_pipeline),
-                             _uridecodebin,
-                             _videoQueue, _videoConvert, _videoSink,
-                             _audioQueue, _audioConvert, _audioResample, _audioSink,
+                             _source, _demuxer,
+                             _h264parser, _videoQueue, _videoSink,
+                             _decodebin, _audioConvert, _audioResample, _audioQueue, _audioSink,
                              nullptr);
 
             // Link the static chains.
-            // The uridecodebin -> queue links are made dynamically in OnPadAdded().
-            if (!gst_element_link_many(_videoQueue, _videoConvert, _videoSink, nullptr)) {
-                LOGERR("GStreamerPlayer::Play: Failed to link videoQueue -> videoconvert -> videosink");
+            // filesrc -> qtdemux (qtdemux dynamic pads linked in OnPadAdded)
+            if (!gst_element_link(_source, _demuxer)) {
+                LOGERR("GStreamerPlayer::Play: Failed to link filesrc -> qtdemux");
                 DestroyPipeline();
                 return Core::ERROR_GENERAL;
             }
-            LOGINFO("GStreamerPlayer::Play: videoQueue -> videoconvert -> videosink linked successfully");
+            LOGINFO("GStreamerPlayer::Play: filesrc -> qtdemux linked successfully");
 
-            if (!gst_element_link_many(_audioQueue, _audioConvert, _audioResample, _audioSink, nullptr)) {
-                LOGERR("GStreamerPlayer::Play: Failed to link audioQueue -> audioconvert -> audioresample -> autoaudiosink");
+            // Link static video elements: h264parse -> video_queue -> westerossink
+            if (!gst_element_link_many(_h264parser, _videoQueue, _videoSink, nullptr)) {
+                LOGERR("GStreamerPlayer::Play: Failed to link h264parse -> video_queue -> westerossink");
                 DestroyPipeline();
                 return Core::ERROR_GENERAL;
             }
-            LOGINFO("GStreamerPlayer::Play: audioQueue -> audioconvert -> audioresample -> autoaudiosink linked successfully");
+            LOGINFO("GStreamerPlayer::Play: h264parse -> video_queue -> westerossink linked successfully");
 
-            // Tell uridecodebin which content to fetch.
-            g_object_set(_uridecodebin, "uri", uri.c_str(), nullptr);
+            // Link static audio elements: audioconvert -> audioresample -> audio_queue -> autoaudiosink
+            if (!gst_element_link_many(_audioConvert, _audioResample, _audioQueue, _audioSink, nullptr)) {
+                LOGERR("GStreamerPlayer::Play: Failed to link audioconvert -> audioresample -> audio_queue -> autoaudiosink");
+                DestroyPipeline();
+                return Core::ERROR_GENERAL;
+            }
+            LOGINFO("GStreamerPlayer::Play: audioconvert -> audioresample -> audio_queue -> autoaudiosink linked successfully");
 
-            // When uridecodebin has decoded pads ready, OnPadAdded() will
-            // link them to the correct queue.
-            g_signal_connect(_uridecodebin, "pad-added",
+            // Set file location on filesrc - extract path from URI
+            // If URI starts with "file://", strip it; otherwise use as-is
+            std::string filePath = uri;
+            if (filePath.find("file://") == 0) {
+                filePath = filePath.substr(7);  // Remove "file://" prefix
+            }
+            g_object_set(_source, "location", filePath.c_str(), nullptr);
+            LOGINFO("GStreamerPlayer::Play: Set file location to %s", filePath.c_str());
+
+            // When qtdemux has demuxed pads ready, OnPadAdded() will
+            // link them to h264parse or decodebin.
+            g_signal_connect(_demuxer, "pad-added",
                              G_CALLBACK(GStreamerPlayerImplementation::OnPadAdded), this);
+
+            // When decodebin has decoded audio pads ready, OnDecodebinPadAdded() will
+            // link them to audioconvert.
+            g_signal_connect(_decodebin, "pad-added",
+                             G_CALLBACK(GStreamerPlayerImplementation::OnDecodebinPadAdded), this);
 
             // Attach a bus watch so that GStreamer messages (ASYNC_DONE, ERROR, EOS)
             // are dispatched on the GMainLoop thread to OnBusMessage().
@@ -276,14 +293,13 @@ namespace WPEFramework {
                     x, y, width, height);
 
             // Move and resize the video window on the Westeros compositor.
-            // "window-set" must be TRUE for position/size properties to take effect.
-            g_object_set(_videoSink,
-                         "window-set", TRUE,
-                         "x",          static_cast<gint>(x),
-                         "y",          static_cast<gint>(y),
-                         "width",      static_cast<gint>(width),
-                         "height",     static_cast<gint>(height),
-                         nullptr);
+            // westerossink expects window-set property in format: "x,y,width,height"
+            // Format: "x,y,width,height" as a string (e.g., "0,0,1280,720")
+            char windowSetValue[64];
+            snprintf(windowSetValue, sizeof(windowSetValue), "%u,%u,%u,%u", x, y, width, height);
+            
+            g_object_set(_videoSink, "window-set", windowSetValue, nullptr);
+            LOGINFO("GStreamerPlayer::SetResolution: Set window-set=\"%s\"", windowSetValue);
 
             return Core::ERROR_NONE;
         }
@@ -310,16 +326,12 @@ namespace WPEFramework {
         // =====================================================================
 
         /**
-         * Called by GStreamer on the streaming thread whenever uridecodebin
-         * exposes a newly decoded pad.
+         * Called by GStreamer on the streaming thread whenever qtdemux
+         * exposes a newly demuxed pad.
          *
-         * We check the pad's media type and link to the correct queue:
-         *  - "video/x-raw" -> videoQueue sink pad
-         *  - "audio/x-raw" -> audioQueue sink pad
-         *
-         * Linking to the queue (not directly to the converter) is essential:
-         * it keeps the uridecodebin streaming thread decoupled from the sink
-         * threads, preventing deadlocks and silent frame drops.
+         * We check the pad's media type and link to the correct element:
+         *  - "video/x-h264" -> h264parser sink pad
+         *  - "audio/*" -> decodebin sink pad
          */
         /* static */
         void GStreamerPlayerImplementation::OnPadAdded(
@@ -327,6 +339,8 @@ namespace WPEFramework {
         {
             GStreamerPlayerImplementation* self =
                 static_cast<GStreamerPlayerImplementation*>(userData);
+
+            LOGINFO("\n=== QTDEMUX PAD ADDED HANDLER ===");
 
             // gst_pad_get_current_caps() can return NULL if caps are not yet
             // finalized when pad-added fires; fall back to querying allowed caps.
@@ -348,24 +362,37 @@ namespace WPEFramework {
                     mediaType, capsStr ? capsStr : "(null)");
             g_free(capsStr);
 
-            GstElement* targetQueue = nullptr;
+            GstElement* targetElement = nullptr;
             const gchar* targetName = nullptr;
 
-            if (g_str_has_prefix(mediaType, "video/x-raw")) {
-                targetQueue = self->_videoQueue;
-                targetName  = "videoQueue";
-            } else if (g_str_has_prefix(mediaType, "audio/x-raw")) {
-                targetQueue = self->_audioQueue;
-                targetName  = "audioQueue";
-            } else {
-                // Unknown / unsupported pad type – skip it.
-                LOGINFO("GStreamerPlayer::OnPadAdded: skipping unsupported pad type '%s'", mediaType);
+            // Handle H.264 Video
+            if (g_str_has_prefix(mediaType, "video/x-h264")) {
+                targetElement = self->_h264parser;
+                targetName    = "h264parse";
+                LOGINFO("GStreamerPlayer::OnPadAdded: Detected H.264 video pad!");
+            }
+            // Handle other video formats (log warning)
+            else if (g_str_has_prefix(mediaType, "video/")) {
+                LOGERR("GStreamerPlayer::OnPadAdded: Detected video pad with format '%s', but only H.264 is supported. Ignoring.",
+                       mediaType);
+                gst_caps_unref(caps);
+                return;
+            }
+            // Handle audio
+            else if (g_str_has_prefix(mediaType, "audio/")) {
+                targetElement = self->_decodebin;
+                targetName    = "decodebin";
+                LOGINFO("GStreamerPlayer::OnPadAdded: Detected audio pad '%s'.", mediaType);
+            }
+            // Unknown pad type
+            else {
+                LOGINFO("GStreamerPlayer::OnPadAdded: Unknown/unsupported pad type '%s'. Ignoring.", mediaType);
                 gst_caps_unref(caps);
                 return;
             }
 
-            // Link newPad to the queue's sink pad (unless already linked).
-            GstPad* sinkPad = gst_element_get_static_pad(targetQueue, "sink");
+            // Link newPad to the target element's sink pad (unless already linked).
+            GstPad* sinkPad = gst_element_get_static_pad(targetElement, "sink");
             if (!sinkPad) {
                 LOGERR("GStreamerPlayer::OnPadAdded: could not get sink pad from %s", targetName);
                 gst_caps_unref(caps);
@@ -379,6 +406,11 @@ namespace WPEFramework {
                 if (linkRet == GST_PAD_LINK_OK) {
                     LOGINFO("GStreamerPlayer::OnPadAdded: successfully linked '%s' pad to %s (ret=%d)",
                             mediaType, targetName, static_cast<int>(linkRet));
+                    if (targetElement == self->_h264parser) {
+                        LOGINFO("GStreamerPlayer::OnPadAdded: Video pipeline: qtdemux -> h264parse -> queue -> westerossink");
+                    } else {
+                        LOGINFO("GStreamerPlayer::OnPadAdded: Audio pipeline: qtdemux -> decodebin -> (will link to audioconvert)");
+                    }
                 } else {
                     LOGERR("GStreamerPlayer::OnPadAdded: FAILED to link '%s' pad to %s (ret=%d) – "
                            "ret meanings: -1=wrong hierarchy, -2=was linked, -3=wrong direction, "
@@ -389,6 +421,72 @@ namespace WPEFramework {
 
             gst_object_unref(sinkPad);
             gst_caps_unref(caps);
+            LOGINFO("=== QTDEMUX PAD ADDED HANDLER EXIT ===\n");
+        }
+
+        /**
+         * Called by GStreamer on the streaming thread whenever decodebin
+         * exposes a newly decoded pad.
+         *
+         * We check the pad's media type and link to audioconvert:
+         *  - "audio/x-raw" -> audioconvert sink pad
+         */
+        /* static */
+        void GStreamerPlayerImplementation::OnDecodebinPadAdded(
+            GstElement* /* src */, GstPad* newPad, gpointer userData)
+        {
+            GStreamerPlayerImplementation* self =
+                static_cast<GStreamerPlayerImplementation*>(userData);
+
+            LOGINFO("\n=== DECODEBIN PAD ADDED HANDLER ===");
+
+            GstCaps* caps = gst_pad_get_current_caps(newPad);
+            if (!caps) {
+                caps = gst_pad_query_caps(newPad, nullptr);
+            }
+            if (!caps) {
+                LOGERR("GStreamerPlayer::OnDecodebinPadAdded: could not determine caps for new pad");
+                return;
+            }
+
+            GstStructure* structure = gst_caps_get_structure(caps, 0);
+            const gchar*  mediaType = gst_structure_get_name(structure);
+
+            gchar* capsStr = gst_caps_to_string(caps);
+            LOGINFO("GStreamerPlayer::OnDecodebinPadAdded: new pad type='%s' full-caps='%s'",
+                    mediaType, capsStr ? capsStr : "(null)");
+            g_free(capsStr);
+
+            // Handle raw audio
+            if (g_str_has_prefix(mediaType, "audio/x-raw")) {
+                LOGINFO("GStreamerPlayer::OnDecodebinPadAdded: Detected raw audio pad from decodebin!");
+
+                GstPad* sinkPad = gst_element_get_static_pad(self->_audioConvert, "sink");
+                if (!sinkPad) {
+                    LOGERR("GStreamerPlayer::OnDecodebinPadAdded: could not get sink pad from audioconvert");
+                    gst_caps_unref(caps);
+                    return;
+                }
+
+                if (gst_pad_is_linked(sinkPad)) {
+                    LOGINFO("GStreamerPlayer::OnDecodebinPadAdded: audioconvert sink pad already linked, skipping");
+                } else {
+                    GstPadLinkReturn linkRet = gst_pad_link(newPad, sinkPad);
+                    if (linkRet == GST_PAD_LINK_OK) {
+                        LOGINFO("GStreamerPlayer::OnDecodebinPadAdded: successfully linked decoded audio pad to audioconvert!");
+                        LOGINFO("GStreamerPlayer::OnDecodebinPadAdded: Complete audio pipeline: decodebin -> audioconvert -> audioresample -> queue -> autoaudiosink");
+                    } else {
+                        LOGERR("GStreamerPlayer::OnDecodebinPadAdded: FAILED to link audio pad to audioconvert (ret=%d)",
+                               static_cast<int>(linkRet));
+                    }
+                }
+                gst_object_unref(sinkPad);
+            } else {
+                LOGINFO("GStreamerPlayer::OnDecodebinPadAdded: Ignoring non-raw-audio pad type '%s' from decodebin.", mediaType);
+            }
+
+            gst_caps_unref(caps);
+            LOGINFO("=== DECODEBIN PAD ADDED HANDLER EXIT ===\n");
         }
 
         /**
@@ -416,13 +514,15 @@ namespace WPEFramework {
 
                 // These pointers were owned by the pipeline – null them out so
                 // we don't accidentally dereference them.
-                _uridecodebin  = nullptr;
+                _source        = nullptr;
+                _demuxer       = nullptr;
+                _h264parser    = nullptr;
                 _videoQueue    = nullptr;
-                _videoConvert  = nullptr;
                 _videoSink     = nullptr;
-                _audioQueue    = nullptr;
+                _decodebin     = nullptr;
                 _audioConvert  = nullptr;
                 _audioResample = nullptr;
+                _audioQueue    = nullptr;
                 _audioSink     = nullptr;
             }
 

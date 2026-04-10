@@ -24,21 +24,16 @@
  * This class runs in a separate WPEProcess host.  It owns a manually built
  * GStreamer pipeline:
  *
- *   uridecodebin --[pad-added]--> videoqueue --> westerossink
- *                              -> audioqueue --> autoaudiosink
+ * Pipeline topology:
+ *
+ *   filesrc -> qtdemux --[pad-added]--+--> h264parse -> video_queue -> westerossink
+ *                                     \--> decodebin --[pad-added]--> audioconvert -> audioresample -> audio_queue -> autoaudiosink
  *
  * The GMainLoop runs in its own thread so that GStreamer can dispatch bus
  * messages (errors, EOS, state-changes) without blocking the COM-RPC thread.
  *
- * Pipeline topology:
- *
- *   uridecodebin --[pad-added]--+--> queue --> videoconvert --> westerossink
- *                               \--> queue --> audioconvert --> audioresample --> autoaudiosink
- *
- * queue elements decouple the uridecodebin streaming thread from the sink
+ * queue elements decouple the demuxer/decoder streaming threads from the sink
  * threads, preventing deadlocks during dynamic pad linking.
- * videoconvert / audioconvert / audioresample bridge pixel-format and
- * sample-rate mismatches between uridecodebin and the sinks.
  */
 
 #pragma once
@@ -81,9 +76,13 @@ namespace WPEFramework {
             Core::hresult Stop() override;
 
         private:
-            // GStreamer callback: called whenever uridecodebin exposes a new decoded pad.
-            // We inspect the pad caps and link it directly to videoconvert or audioconvert.
+            // GStreamer callback: called whenever qtdemux exposes a new demuxed pad.
+            // We inspect the pad caps and link video to h264parse or audio to decodebin.
             static void OnPadAdded(GstElement* src, GstPad* newPad, gpointer userData);
+
+            // GStreamer callback: called whenever decodebin exposes a decoded audio pad.
+            // We link it to audioconvert.
+            static void OnDecodebinPadAdded(GstElement* src, GstPad* newPad, gpointer userData);
 
             // GStreamer bus watch: dispatches pipeline messages (ASYNC_DONE, ERROR, EOS)
             // from the GMainLoop thread to the appropriate notification handler.
@@ -106,14 +105,16 @@ namespace WPEFramework {
             // After gst_object_unref(_pipeline) they become dangling; we NULL them out
             // immediately in DestroyPipeline().
             GstElement* _pipeline;      // top-level GstPipeline
-            GstElement* _uridecodebin;  // decodes any URI; emits pad-added signals
-            GstElement* _audioQueue;    // decouples streaming thread from audio sink thread
+            GstElement* _source;        // filesrc: reads from file
+            GstElement* _demuxer;       // qtdemux: demuxes container; emits pad-added signals
+            GstElement* _h264parser;    // h264parse: parses H.264 video stream
+            GstElement* _videoQueue;    // decouples streaming thread from video sink thread
+            GstElement* _videoSink;     // westerossink: renders video via Westeros
+            GstElement* _decodebin;     // decodebin: decodes audio; emits pad-added signals
             GstElement* _audioConvert;  // converts any audio format for autoaudiosink
             GstElement* _audioResample; // resamples to the rate autoaudiosink requires
+            GstElement* _audioQueue;    // decouples streaming thread from audio sink thread
             GstElement* _audioSink;     // autoaudiosink: picks the best audio output
-            GstElement* _videoQueue;    // decouples streaming thread from video sink thread
-            GstElement* _videoConvert;  // converts any pixel format for westerossink
-            GstElement* _videoSink;     // westerossink: renders video via Westeros
 
             // --- GMainLoop for bus messages ---
             // GStreamer dispatches errors, EOS and state-change messages on this loop.

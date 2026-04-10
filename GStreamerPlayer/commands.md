@@ -48,12 +48,20 @@ Expected response:
 ## GStreamerPlayer API Commands
 
 ### play
-Load and play media from the given URI. Builds a GStreamer pipeline internally: `uridecodebin → queue → westerossink / autoaudiosink`.
+Load and play media from the given URI. Builds a GStreamer pipeline internally: `filesrc → qtdemux → h264parse → queue → westerossink` (video) and `qtdemux → decodebin → audioconvert → audioresample → queue → autoaudiosink` (audio).
 
 ```bash
-curl -d '{"jsonrpc":"2.0","id":10,"method":"org.rdk.GStreamerPlayer.1.play","params":{"uri":"https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4"}}' http://127.0.0.1:9998/jsonrpc
+# curl -d '{"jsonrpc":"2.0","id":10,"method":"org.rdk.GStreamerPlayer.1.play","params":{"uri":"https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4"}}' http://127.0.0.1:9998/jsonrpc
 
-curl -d '{"jsonrpc":"2.0","id":10,"method":"org.rdk.GStreamerPlayer.1.play","params":{"uri":"https://gstreamer.freedesktop.org/data/media/sintel_trailer-480p.webm"}}' http://127.0.0.1:9998/jsonrpc
+# curl -d '{"jsonrpc":"2.0","id":10,"method":"org.rdk.GStreamerPlayer.1.play","params":{"uri":"https://gstreamer.freedesktop.org/data/media/sintel_trailer-480p.webm"}}' http://127.0.0.1:9998/jsonrpc
+1. Play Local File (Standard Format)
+curl -d '{"jsonrpc":"2.0","id":10,"method":"org.rdk.GStreamerPlayer.1.play","params":{"uri":"file:///opt/rev/video"}}' http://127.0.0.1:9998/jsonrpc
+
+2. Play Local File (Alternative - Direct Path)
+curl -d '{"jsonrpc":"2.0","id":10,"method":"org.rdk.GStreamerPlayer.1.play","params":{"uri":"/opt/rev/video"}}' http://127.0.0.1:9998/jsonrpc
+
+3. Play with Custom Video File
+curl -d '{"jsonrpc":"2.0","id":10,"method":"org.rdk.GStreamerPlayer.1.play","params":{"uri":"file:///home/user/Videos/sample.mp4"}}' http://127.0.0.1:9998/jsonrpc
 
 ```
 Expected response:
@@ -78,10 +86,21 @@ Expected response:
 ---
 
 ### setResolution
-Set the video window position and size on screen (calls `g_object_set` on the `westerossink` element).
+Set the video window position and size on screen. Internally sets westerossink's `window-set` property with format `"x,y,width,height"`.
 
+**Full screen (1920x1080):**
 ```bash
 curl -d '{"jsonrpc":"2.0","id":12,"method":"org.rdk.GStreamerPlayer.1.setResolution","params":{"x":0,"y":0,"width":1920,"height":1080}}' http://127.0.0.1:9998/jsonrpc
+```
+
+**Custom position and size (e.g., 1280x720 at position 100,100):**
+```bash
+curl -d '{"jsonrpc":"2.0","id":12,"method":"org.rdk.GStreamerPlayer.1.setResolution","params":{"x":100,"y":100,"width":1280,"height":720}}' http://127.0.0.1:9998/jsonrpc
+```
+
+**Picture-in-Picture style (small window at top-right):**
+```bash
+curl -d '{"jsonrpc":"2.0","id":12,"method":"org.rdk.GStreamerPlayer.1.setResolution","params":{"x":1280,"y":0,"width":640,"height":360}}' http://127.0.0.1:9998/jsonrpc
 ```
 
 Expected response:
