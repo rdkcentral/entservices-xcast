@@ -58,7 +58,7 @@ Load and play media from the given URI. Builds a GStreamer pipeline internally: 
 curl -d '{"jsonrpc":"2.0","id":10,"method":"org.rdk.GStreamerPlayer.1.play","params":{"uri":"file:///opt/rev/mov_bbb.mp4"}}' http://127.0.0.1:9998/jsonrpc
 
 2. Play Local File (Alternative - Direct Path)
-curl -d '{"jsonrpc":"2.0","id":10,"method":"org.rdk.GStreamerPlayer.1.play","params":{"uri":"/opt/rev/video"}}' http://127.0.0.1:9998/jsonrpc
+curl -d '{"jsonrpc":"2.0","id":10,"method":"org.rdk.GStreamerPlayer.1.play","params":{"uri":"/opt/rev/mov_bbb.mp4"}}' http://127.0.0.1:9998/jsonrpc
 
 3. Play with Custom Video File
 curl -d '{"jsonrpc":"2.0","id":10,"method":"org.rdk.GStreamerPlayer.1.play","params":{"uri":"file:///home/user/Videos/sample.mp4"}}' http://127.0.0.1:9998/jsonrpc
