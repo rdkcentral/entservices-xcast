@@ -74,6 +74,8 @@ namespace WPEFramework {
             Core::hresult SetResolution(const uint32_t x, const uint32_t y,
                                         const uint32_t width, const uint32_t height) override;
             Core::hresult Stop() override;
+            Core::hresult SeekForward() override;
+            Core::hresult SeekBackward() override;
 
         private:
             // GStreamer callback: called whenever qtdemux exposes a new demuxed pad.

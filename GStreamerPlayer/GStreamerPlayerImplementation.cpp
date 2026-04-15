@@ -317,6 +317,103 @@ namespace WPEFramework {
         }
 
         // =====================================================================
+        // SeekForward
+        // =====================================================================
+
+        Core::hresult GStreamerPlayerImplementation::SeekForward()
+        {
+            if (_pipeline == nullptr) {
+                LOGERR("GStreamerPlayer::SeekForward: No pipeline is running");
+                return Core::ERROR_ILLEGAL_STATE;
+            }
+
+            LOGINFO("GStreamerPlayer::SeekForward: seeking forward by 5 seconds");
+
+            // Get current position
+            gint64 currentPos = 0;
+            if (!gst_element_query_position(_pipeline, GST_FORMAT_TIME, &currentPos)) {
+                LOGERR("GStreamerPlayer::SeekForward: Failed to query current position");
+                return Core::ERROR_GENERAL;
+            }
+
+            // Calculate new position (current + 5 seconds in nanoseconds)
+            gint64 newPos = currentPos + (5 * GST_SECOND);
+
+            // Get duration to avoid seeking beyond the end
+            gint64 duration = 0;
+            if (gst_element_query_duration(_pipeline, GST_FORMAT_TIME, &duration)) {
+                if (newPos > duration) {
+                    newPos = duration;
+                    LOGINFO("GStreamerPlayer::SeekForward: Capping position to duration");
+                }
+            }
+
+            // Perform the seek operation
+            gboolean seekResult = gst_element_seek_simple(
+                _pipeline,
+                GST_FORMAT_TIME,
+                static_cast<GstSeekFlags>(GST_SEEK_FLAG_FLUSH | GST_SEEK_FLAG_KEY_UNIT),
+                newPos
+            );
+
+            if (!seekResult) {
+                LOGERR("GStreamerPlayer::SeekForward: Seek operation failed");
+                return Core::ERROR_GENERAL;
+            }
+
+            LOGINFO("GStreamerPlayer::SeekForward: Successfully seeked forward to position %" GST_TIME_FORMAT,
+                    GST_TIME_ARGS(newPos));
+            return Core::ERROR_NONE;
+        }
+
+        // =====================================================================
+        // SeekBackward
+        // =====================================================================
+
+        Core::hresult GStreamerPlayerImplementation::SeekBackward()
+        {
+            if (_pipeline == nullptr) {
+                LOGERR("GStreamerPlayer::SeekBackward: No pipeline is running");
+                return Core::ERROR_ILLEGAL_STATE;
+            }
+
+            LOGINFO("GStreamerPlayer::SeekBackward: seeking backward by 5 seconds");
+
+            // Get current position
+            gint64 currentPos = 0;
+            if (!gst_element_query_position(_pipeline, GST_FORMAT_TIME, &currentPos)) {
+                LOGERR("GStreamerPlayer::SeekBackward: Failed to query current position");
+                return Core::ERROR_GENERAL;
+            }
+
+            // Calculate new position (current - 5 seconds in nanoseconds)
+            gint64 newPos = currentPos - (5 * GST_SECOND);
+
+            // Ensure we don't seek before the beginning
+            if (newPos < 0) {
+                newPos = 0;
+                LOGINFO("GStreamerPlayer::SeekBackward: Capping position to 0 (beginning)");
+            }
+
+            // Perform the seek operation
+            gboolean seekResult = gst_element_seek_simple(
+                _pipeline,
+                GST_FORMAT_TIME,
+                static_cast<GstSeekFlags>(GST_SEEK_FLAG_FLUSH | GST_SEEK_FLAG_KEY_UNIT),
+                newPos
+            );
+
+            if (!seekResult) {
+                LOGERR("GStreamerPlayer::SeekBackward: Seek operation failed");
+                return Core::ERROR_GENERAL;
+            }
+
+            LOGINFO("GStreamerPlayer::SeekBackward: Successfully seeked backward to position %" GST_TIME_FORMAT,
+                    GST_TIME_ARGS(newPos));
+            return Core::ERROR_NONE;
+        }
+
+        // =====================================================================
         // Private helpers
         // =====================================================================
 
