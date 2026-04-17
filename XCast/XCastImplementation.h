@@ -25,6 +25,7 @@
 #include <interfaces/IPowerManager.h>
 #include <interfaces/IConfiguration.h>
 #include <interfaces/INetworkManager.h>
+#include <interfaces/ISystemServices.h>
  
 #include <com/com.h>
 #include <core/core.h>
@@ -203,6 +204,34 @@ namespace WPEFramework
                 private:
                     XCastImplementation& _parent;
             };
+
+            class SystemServicesNotification : public Exchange::ISystemServices::INotification
+            {
+                private:
+                    SystemServicesNotification(const SystemServicesNotification&) = delete;
+                    SystemServicesNotification& operator=(const SystemServicesNotification&) = delete;
+
+                public:
+                    explicit SystemServicesNotification(XCastImplementation& parent)
+                    : _parent(parent)
+                    {
+                    }
+                    ~SystemServicesNotification() override = default;
+
+                public:
+                    void OnFriendlyNameChanged(const string& friendlyName) override
+                    {
+                        LOGINFO("OnFriendlyNameChanged [%s]", friendlyName.c_str());
+                        _parent.onFriendlyNameUpdateHandler(friendlyName);
+                    }
+
+                    BEGIN_INTERFACE_MAP(SystemServicesNotification)
+                    INTERFACE_ENTRY(Exchange::ISystemServices::INotification)
+                    END_INTERFACE_MAP
+
+                private:
+                    XCastImplementation& _parent;
+           };
  
         public:
             Core::hresult Register(Exchange::IXCast::INotification *notification) override;
@@ -259,6 +288,10 @@ namespace WPEFramework
             std::list<Exchange::IXCast::INotification *> _xcastNotification; // List of registered notifications
             Core::Sink<NetworkManagerNotification> _networkManagerNotification;
 
+            Exchange::ISystemServices* _systemServicesPlugin;
+            Core::Sink<SystemServicesNotification> _systemServicesNotification;
+            bool _registeredSystemEventHandlers;
+
             void dumpDynamicAppCacheList(string strListName, std::vector<DynamicAppConfig*>& appConfigList);
             bool deleteFromDynamicAppCache(vector<string>& appsToDelete);
 
@@ -292,10 +325,12 @@ namespace WPEFramework
             uint32_t enableCastService(string friendlyname,bool enableService);
             uint32_t Configure(PluginHost::IShell* shell);
             
-            void getSystemPlugin();
+            void registerSystemEventHandlers();
+            void unregisterSystemEventHandlers();
+            void InitializeSystemServices(PluginHost::IShell* service);
             int updateSystemFriendlyName();
             void threadSystemFriendlyNameChangeEvent(void);
-            void onFriendlyNameUpdateHandler(const JsonObject& parameters);
+            void onFriendlyNameUpdateHandler(const string friendlyName);
             
             void onXcastUpdatePowerStateRequest(string powerState);
             uint32_t SetNetworkStandbyMode(bool networkStandbyMode);
