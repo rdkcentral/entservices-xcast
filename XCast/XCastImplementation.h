@@ -330,7 +330,7 @@ namespace WPEFramework
             void InitializeSystemServices(PluginHost::IShell* service);
             int updateSystemFriendlyName();
             void threadSystemFriendlyNameChangeEvent(void);
-            void onFriendlyNameUpdateHandler(const string friendlyName);
+            void onFriendlyNameUpdateHandler(const string& friendlyName);
             
             void onXcastUpdatePowerStateRequest(string powerState);
             uint32_t SetNetworkStandbyMode(bool networkStandbyMode);
