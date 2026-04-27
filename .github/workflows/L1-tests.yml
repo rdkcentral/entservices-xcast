@@ -16,6 +16,7 @@ env:
   REPO_NAME: "entservices-xcast"
   THUNDER_REF: "R4.4.1"
   INTERFACES_REF: "develop"
+  ENABLE_CACHE: "false"
   AUTOMATICS_UNAME: ${{ secrets.AUTOMATICS_UNAME}}
   AUTOMATICS_PASSCODE: ${{ secrets. AUTOMATICS_PASSCODE}}
 
@@ -41,7 +42,7 @@ jobs:
         # https://github.com/actions/cache
         # https://docs.github.com/en/rest/actions/cache
         # Modify the key if changing the list.
-        if: ${{ !env.ACT }}
+        if: ${{ !env.ACT && env.ENABLE_CACHE == 'true' }}
         id: cache
         uses: actions/cache@v3
         with:
