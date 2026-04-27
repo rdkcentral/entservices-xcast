@@ -222,7 +222,7 @@ jobs:
         run: |
           mkdir -p "$GITHUB_WORKSPACE/install/usr/include/WPEFramework/interfaces"
           cp "$GITHUB_WORKSPACE/networkmanager/interface/INetworkManager.h" "$GITHUB_WORKSPACE/install/usr/include/WPEFramework/interfaces/"
-          cp "$GITHUB_WORKSPACE/networkmanager/interface/INetworkManager.h" "$GITHUB_WORKSPACE/entservices-apis/apis/NetworkManager/"
+          cp "$GITHUB_WORKSPACE/networkmanager/interface/INetworkManager.h" "$GITHUB_WORKSPACE/entservices-apis/apis/"
 
       - name: Build entservices-apis
         run: >
