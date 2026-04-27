@@ -91,7 +91,7 @@ cd ..
 # Copy INetworkManager interface header (required by ProxyStubGenerator)
 mkdir -p "$GITHUB_WORKSPACE/install/usr/include/WPEFramework/interfaces"
 cp -v "$GITHUB_WORKSPACE/networkmanager/interface/INetworkManager.h" "$GITHUB_WORKSPACE/install/usr/include/WPEFramework/interfaces/"
-cp -v "$GITHUB_WORKSPACE/networkmanager/interface/INetworkManager.h" "$GITHUB_WORKSPACE/entservices-apis/apis/"
+cp -v "$GITHUB_WORKSPACE/networkmanager/interface/INetworkManager.h" "$GITHUB_WORKSPACE/entservices-apis/apis/NetworkManager/"
 
 cmake -G Ninja -S entservices-apis  -B build/entservices-apis \
     -DEXCEPTIONS_ENABLE=ON \
