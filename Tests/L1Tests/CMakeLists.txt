@@ -33,7 +33,7 @@ set (TEST_LIB
     ${NAMESPACE}Plugins::${NAMESPACE}Plugins
 )
 
-set (TEST_INC ../../helpers)
+set (TEST_INC)
 
 #########################################################################################
 # add_plugin_test_ex: Macro to add plugin tests, it will append to TEST_SRC, TEST_INC,
@@ -103,7 +103,7 @@ macro(add_plugin_test plugin_name test_files)
 endmacro()
 
 # PLUGIN_XCAST
-set (XCAST_INC ${CMAKE_SOURCE_DIR}/../entservices-xcast/XCast ${CMAKE_SOURCE_DIR}/../entservices-xcast/helpers)
+set (XCAST_INC ${CMAKE_SOURCE_DIR}/../entservices-xcast/XCast ${CMAKE_SOURCE_DIR}/../entservices-helpers/helpers)
 set (XCAST_LIBS ${NAMESPACE}XCast ${NAMESPACE}XCastImplementation)
 add_plugin_test_ex(PLUGIN_XCAST tests/test_XCast.cpp "${XCAST_INC}" "${XCAST_LIBS}")
 
