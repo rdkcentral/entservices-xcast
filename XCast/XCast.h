@@ -151,6 +151,7 @@ namespace WPEFramework {
 					Exchange::IXCast *_xcast{};
 					Exchange::IConfiguration* mConfigure;
 					Core::Sink<Notification> _xcastNotification;
+					bool m_notificationRegistered;
 
 					friend class Notification;
         };
