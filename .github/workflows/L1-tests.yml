@@ -120,7 +120,7 @@ jobs:
         with:
           repository: rdkcentral/entservices-testframework
           path: entservices-testframework
-          ref: 1.0.1
+          ref: 1.0.8
 
       - name: Checkout networkmanager
         uses: actions/checkout@v3
