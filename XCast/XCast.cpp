@@ -48,6 +48,7 @@ namespace WPEFramework
             , _xcast(nullptr)
             , mConfigure(nullptr)
             , _xcastNotification(this)
+            , m_notificationRegistered(false)
         {
             SYSLOG(Logging::Startup, (_T("XCast Constructor")));
         }
@@ -91,6 +92,7 @@ namespace WPEFramework
                         _xcast->Register(&_xcastNotification);
                         // Invoking Plugin API register to wpeframework
                         Exchange::JXCast::Register(*this, _xcast);
+                        m_notificationRegistered = true;
                     }
                 }
                 else
@@ -107,7 +109,6 @@ namespace WPEFramework
             if (0 != message.length())
             {
                 LOGERR("'%s'", message.c_str());
-                Deinitialize(service);
             }
 
             return message;
@@ -121,8 +122,13 @@ namespace WPEFramework
 
             if (nullptr != _xcast)
             {
-                _xcast->Unregister(&_xcastNotification);
-                Exchange::JXCast::Unregister(*this);
+                if (m_notificationRegistered)
+                {
+                    Exchange::JXCast::Unregister(*this);
+                    _xcast->Unregister(&_xcastNotification);
+                    m_notificationRegistered = false;
+                }
+
                 if (nullptr != mConfigure)
                 {
                     uint32_t result = mConfigure->Configure(nullptr);
@@ -137,6 +143,7 @@ namespace WPEFramework
                     mConfigure->Release();
                     mConfigure = nullptr;
                 }
+
                 // Stop processing:
                 RPC::IRemoteConnection *connection = service->RemoteConnection(_connectionId);
                 VARIABLE_IS_NOT_USED uint32_t result = _xcast->Release();
@@ -153,14 +160,15 @@ namespace WPEFramework
                     connection->Terminate();
                     connection->Release();
                 }
-                // Make sure the Activated and Deactivated are no longer called before we start cleaning up..
-                if (nullptr != _service)
-                {
-                    _service->Unregister(&_xcastNotification);
-                    _service->Release();
-                    _service = nullptr;
-                }
                 _xcast = nullptr;
+            }
+
+            // Make sure the Activated and Deactivated are no longer called before we start cleaning up..
+            if (nullptr != _service)
+            {
+                _service->Unregister(&_xcastNotification);
+                _service->Release();
+                _service = nullptr;
             }
             _connectionId = 0;
             SYSLOG(Logging::Shutdown, (string(_T("XCast de-initialised"))));
