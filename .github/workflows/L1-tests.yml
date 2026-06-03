@@ -212,7 +212,7 @@ jobs:
         with:
           repository: rdkcentral/entservices-apis
           path: entservices-apis
-          ref: feature/RDKEMW-7075
+          ref: ${{env.INTERFACES_REF}}
           #token : ${{ secrets.RDKCM_RDKE }}
 
       - name: Remove DTV.json
