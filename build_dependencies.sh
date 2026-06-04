@@ -37,6 +37,8 @@ git clone --branch 1.0.13 https://github.com/rdkcentral/entservices-testframewor
 
 git clone --branch v3.0.0 https://github.com/rdkcentral/networkmanager.git
 
+git clone --branch develop https://github.com/rdkcentral/entservices-helpers.git
+
 ############################
 # Build Thunder-Tools
 echo "======================================================================================"
@@ -112,7 +114,7 @@ cd $GITHUB_WORKSPACE
 # Build entservices-helpers
 echo "======================================================================================"
 echo "building entservices-helpers"
-cmake -G Ninja -S ../entservices-helpers -B build/entservices-helpers \
+cmake -G Ninja -S entservices-helpers -B build/entservices-helpers \
     -DEXCEPTIONS_ENABLE=ON \
     -DCMAKE_INSTALL_PREFIX="$GITHUB_WORKSPACE/install/usr" \
     -DCMAKE_MODULE_PATH="$GITHUB_WORKSPACE/install/tools/cmake" \
