@@ -33,13 +33,9 @@ git clone --branch R4.4.1 https://github.com/rdkcentral/Thunder.git
 
 git clone --branch develop https://github.com/rdkcentral/entservices-apis.git
 
-cd ..
-git clone --branch develop https://github.com/rdkcentral/entservices-helpers.git
-cd "$GITHUB_WORKSPACE"
+git clone --branch 1.0.13 https://github.com/rdkcentral/entservices-testframework.git
 
-git clone --branch 1.0.12 https://github.com/rdkcentral/entservices-testframework.git
-
-git clone --branch main https://github.com/rdkcentral/networkmanager.git
+git clone --branch v3.0.0 https://github.com/rdkcentral/networkmanager.git
 
 ############################
 # Build Thunder-Tools

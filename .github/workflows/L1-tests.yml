@@ -16,6 +16,7 @@ env:
   REPO_NAME: "entservices-xcast"
   THUNDER_REF: "R4.4.1"
   INTERFACES_REF: "develop"
+  ENABLE_CACHE: "false"
   AUTOMATICS_UNAME: ${{ secrets.AUTOMATICS_UNAME}}
   AUTOMATICS_PASSCODE: ${{ secrets. AUTOMATICS_PASSCODE}}
 
@@ -41,7 +42,7 @@ jobs:
         # https://github.com/actions/cache
         # https://docs.github.com/en/rest/actions/cache
         # Modify the key if changing the list.
-        if: ${{ !env.ACT }}
+        if: ${{ !env.ACT && env.ENABLE_CACHE == 'true' }}
         id: cache
         uses: actions/cache@v3
         with:
@@ -123,15 +124,14 @@ jobs:
         with:
           repository: rdkcentral/entservices-testframework
           path: entservices-testframework
-          ref: 1.0.12
+          ref: 1.0.13
 
       - name: Checkout networkmanager
         uses: actions/checkout@v3
         with:
           repository: rdkcentral/networkmanager
           path: networkmanager
-          ref: main
-          fetch-depth: 1
+          ref: v3.0.0
 
       - name: Checkout entservices-xcast
         if: ${{ inputs.caller_source == 'local' }}
