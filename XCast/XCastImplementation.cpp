@@ -82,7 +82,10 @@ namespace WPEFramework
         _registeredNMEventHandlers(false),
         _networkManagerPlugin(nullptr),
         _adminLock(),
-        _networkManagerNotification(*this)
+        _networkManagerNotification(*this),
+        _systemServicesPlugin(nullptr),
+        _systemServicesNotification(*this),
+        _registeredSystemEventHandlers(false)
         {
             LOGINFO("Call constructor");
             m_locateCastTimer.connect( bind( &XCastImplementation::onLocateCastTimer, this ));
@@ -181,11 +184,18 @@ namespace WPEFramework
             }
             unregisterPowerEventHandlers();
             unregisterNetworkEventHandlers();
+            unregisterSystemEventHandlers();
             if (_powerManagerPlugin) {
                 _powerManagerPlugin.Reset();
             }
             if (_networkManagerPlugin) {
                 _networkManagerPlugin->Release();
+                _networkManagerPlugin = nullptr;
+            }
+            if (_systemServicesPlugin)
+            {
+                _systemServicesPlugin->Release();
+                _systemServicesPlugin = nullptr;
             }
             LOGINFO("Exiting ...");
         }
@@ -209,42 +219,40 @@ namespace WPEFramework
             }
         }
 
-        void XCastImplementation::getSystemPlugin()
+        void XCastImplementation::InitializeSystemServices(PluginHost::IShell* service)
         {
-            LOGINFO("Entering..!!!");
-            if(nullptr == m_SystemPluginObj)
+            if (nullptr == _systemServicesPlugin)
             {
-                Core::SystemInfo::SetEnvironment(_T("THUNDER_ACCESS"), (_T(SERVER_DETAILS)));
-                m_SystemPluginObj = new WPEFramework::JSONRPC::LinkType<Core::JSON::IElement>(_T(SYSTEM_CALLSIGN_VER), (_T(SYSTEM_CALLSIGN_VER)), false);
-                if (nullptr == m_SystemPluginObj)
+                _systemServicesPlugin = service->QueryInterfaceByCallsign<WPEFramework::Exchange::ISystemServices>("org.rdk.System");
+                if (_systemServicesPlugin != nullptr)
                 {
-                    LOGERR("JSONRPC: [%s]: initialization failed", SYSTEM_CALLSIGN_VER);
+                    registerSystemEventHandlers();
                 }
                 else
                 {
-                    LOGINFO("JSONRPC: [%s]: initialization ok", SYSTEM_CALLSIGN_VER);
+                    LOGERR("Failed to get SystemServices instance");
                 }
             }
-            LOGINFO("Exiting..!!!");
         }
 
         int XCastImplementation::updateSystemFriendlyName()
         {
-            JsonObject params, Result;
+            bool success;
+            string friendlyName;
 
-            if (nullptr == m_SystemPluginObj)
+            if (nullptr == _systemServicesPlugin)
             {
-                LOGERR("m_SystemPluginObj not yet instantiated");
+                LOGERR("SystemServices plugin is not initialized");
                 return Core::ERROR_GENERAL;
             }
 
-            uint32_t ret = m_SystemPluginObj->Invoke<JsonObject, JsonObject>(THUNDER_RPC_TIMEOUT, _T("getFriendlyName"), params, Result);
+            auto ret = _systemServicesPlugin->GetFriendlyName(friendlyName, success);
 
             if (Core::ERROR_NONE == ret)
             {
-                if (Result["success"].Boolean())
+                if (success)
                 {
-                    m_friendlyName = Result["friendlyName"].String();
+                    m_friendlyName = std::move(friendlyName);
                 }
                 else
                 {
@@ -256,21 +264,17 @@ namespace WPEFramework
             {
                 LOGERR("getSystemFriendlyName call failed E[%u]", ret);
             }
+
             return ret;
         }
 
-
-        void XCastImplementation::onFriendlyNameUpdateHandler(const JsonObject& parameters)
+        void XCastImplementation::onFriendlyNameUpdateHandler(const string& friendlyName)
         {
-            string message;
-            string value;
-            parameters.ToString(message);
-            LOGINFO("[Friendly Name Event] Msg[%s]", message.c_str());
+            LOGINFO("[Friendly Name Event] Msg[%s]", friendlyName.c_str());
 
-            if (parameters.HasLabel("friendlyName"))
+            if (!friendlyName.empty())
             {
-                value = parameters["friendlyName"].String();
-                m_friendlyName = std::move(value);
+                m_friendlyName = friendlyName;
                 LOGINFO("friendlyName[%s]",m_friendlyName.c_str());
                 std::thread friendlyNameChangeThread = std::thread(&XCastImplementation::threadSystemFriendlyNameChangeEvent,this);
                 friendlyNameChangeThread.detach();
@@ -300,8 +304,7 @@ namespace WPEFramework
                 InitializePowerManager(service);
                 InitializeNetworkManager(service);
                 Initialize(m_networkStandbyMode);
-                getSystemPlugin();
-                m_SystemPluginObj->Subscribe<JsonObject>(1000, "onFriendlyNameChanged", &XCastImplementation::onFriendlyNameUpdateHandler, this);
+                InitializeSystemServices(service);
                 if (Core::ERROR_NONE == updateSystemFriendlyName())
                 {
                     LOGINFO("updateSystemFriendlyName successfully [%s]",m_friendlyName.c_str());
@@ -405,6 +408,33 @@ namespace WPEFramework
                 _networkManagerPlugin->Unregister(&_networkManagerNotification);
                 LOGINFO("INetworkManager::Unregister event unregistered");
                 _registeredNMEventHandlers = false;
+            }
+        }
+
+        void XCastImplementation::registerSystemEventHandlers()
+        {
+            if (_systemServicesPlugin)
+            {
+                if (Core::ERROR_NONE == _systemServicesPlugin->Register(&_systemServicesNotification))
+                {
+                    LOGINFO("ISystemServices::Register event registered");
+                    _registeredSystemEventHandlers = true;
+                }
+                else
+                {
+                    LOGERR("Failed to register ISystemServices::Register event");
+                    _registeredSystemEventHandlers = false;
+                }
+            }
+        }
+
+        void XCastImplementation::unregisterSystemEventHandlers()
+        {
+            if (_registeredSystemEventHandlers && _systemServicesPlugin)
+            {
+                _systemServicesPlugin->Unregister(&_systemServicesNotification);
+                LOGINFO("ISystemServices::Unregister event unregistered");
+                _registeredSystemEventHandlers = false;
             }
         }
 
