@@ -190,6 +190,7 @@ namespace WPEFramework
             }
             if (_networkManagerPlugin) {
                 _networkManagerPlugin->Release();
+                _networkManagerPlugin = nullptr;
             }
             if (_systemServicesPlugin)
             {
