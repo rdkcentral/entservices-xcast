@@ -39,6 +39,11 @@ git clone --branch v3.0.0 https://github.com/rdkcentral/networkmanager.git
 
 git clone --branch develop https://github.com/rdkcentral/entservices-helpers.git
 
+# Keep backward-compatible parent path expected by some test CMake files.
+if [ ! -e "$GITHUB_WORKSPACE/../entservices-helpers" ]; then
+ln -s "$GITHUB_WORKSPACE/entservices-helpers" "$GITHUB_WORKSPACE/../entservices-helpers"
+fi
+
 ############################
 # Build Thunder-Tools
 echo "======================================================================================"
