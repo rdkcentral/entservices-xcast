@@ -342,9 +342,7 @@ jobs:
 
       - name: Create parent helpers compatibility path
         run: >
-          if [ ! -e "$GITHUB_WORKSPACE/../entservices-helpers" ]; then
-          ln -s "$GITHUB_WORKSPACE/entservices-helpers" "$GITHUB_WORKSPACE/../entservices-helpers"
-          fi
+          if [ ! -e "$GITHUB_WORKSPACE/../entservices-helpers" ]; then ln -s "$GITHUB_WORKSPACE/entservices-helpers" "$GITHUB_WORKSPACE/../entservices-helpers"; fi
 
       - name: Build entservices-helpers
         run: >
