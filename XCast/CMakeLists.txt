@@ -24,6 +24,7 @@ set(PLUGIN_XCAST_STARTUPORDER "" CACHE STRING "To configure startup order of XCa
 set(PLUGIN_XCAST_MODE "Local" CACHE STRING "Controls if the plugin should run in its own process, in process or remote")
 
 find_package(${NAMESPACE}Plugins REQUIRED)
+find_package(${NAMESPACE}Helpers REQUIRED)
 find_package(RFC)
 find_package(GLIB REQUIRED)
 find_package(WPEFrameworkSecurityUtil)
@@ -53,10 +54,7 @@ set_target_properties(${MODULE_NAME} PROPERTIES
 target_compile_definitions(${MODULE_NAME} PRIVATE MODULE_NAME=Plugin_${PLUGIN_NAME})
 
 
-include_directories(
-        ../helpers)
-
-target_link_libraries(${MODULE_NAME} PRIVATE ${NAMESPACE}Plugins::${NAMESPACE}Plugins ${NAMESPACE}Definitions::${NAMESPACE}Definitions)
+target_link_libraries(${MODULE_NAME} PRIVATE ${NAMESPACE}Plugins::${NAMESPACE}Plugins ${NAMESPACE}Definitions::${NAMESPACE}Definitions ${NAMESPACE}::${NAMESPACE}Helpers)
 
 install(TARGETS ${MODULE_NAME}
         DESTINATION lib/${STORAGE_DIRECTORY}/plugins)
@@ -68,7 +66,8 @@ add_library(${PLUGIN_IMPLEMENTATION} SHARED
         
 target_link_libraries(${PLUGIN_IMPLEMENTATION}
         PRIVATE
-        ${NAMESPACE}Plugins::${NAMESPACE}Plugins)
+        ${NAMESPACE}Plugins::${NAMESPACE}Plugins
+        ${NAMESPACE}::${NAMESPACE}Helpers)
 set_target_properties(${PLUGIN_IMPLEMENTATION} PROPERTIES
         CXX_STANDARD 11
         CXX_STANDARD_REQUIRED YES)	
