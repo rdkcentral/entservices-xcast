@@ -289,7 +289,6 @@ namespace WPEFramework
 
             Exchange::ISystemServices* _systemServicesPlugin;
             Core::Sink<SystemServicesNotification> _systemServicesNotification;
-            bool _registeredSystemEventHandlers;
 
             void dumpDynamicAppCacheList(string strListName, std::vector<DynamicAppConfig*>& appConfigList);
             bool deleteFromDynamicAppCache(vector<string>& appsToDelete);
