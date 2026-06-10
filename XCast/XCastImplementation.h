@@ -279,7 +279,6 @@ namespace WPEFramework
             static bool m_standbyBehavior;
             bool m_networkStandbyMode;
             bool _registeredPowerEventHandlers;
-            bool _registeredNMEventHandlers;
 
         private:
             Exchange::INetworkManager* _networkManagerPlugin;
