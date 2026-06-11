@@ -279,7 +279,6 @@ namespace WPEFramework
             static bool m_standbyBehavior;
             bool m_networkStandbyMode;
             bool _registeredPowerEventHandlers;
-            bool _registeredNMEventHandlers;
 
         private:
             Exchange::INetworkManager* _networkManagerPlugin;
@@ -290,7 +289,6 @@ namespace WPEFramework
 
             Exchange::ISystemServices* _systemServicesPlugin;
             Core::Sink<SystemServicesNotification> _systemServicesNotification;
-            bool _registeredSystemEventHandlers;
 
             void dumpDynamicAppCacheList(string strListName, std::vector<DynamicAppConfig*>& appConfigList);
             bool deleteFromDynamicAppCache(vector<string>& appsToDelete);
