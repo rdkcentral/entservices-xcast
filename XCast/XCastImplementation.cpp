@@ -79,13 +79,11 @@ namespace WPEFramework
         _pwrMgrNotification(*this),
         m_networkStandbyMode(false),
         _registeredPowerEventHandlers(false),
-        _registeredNMEventHandlers(false),
         _networkManagerPlugin(nullptr),
         _adminLock(),
         _networkManagerNotification(*this),
         _systemServicesPlugin(nullptr),
-        _systemServicesNotification(*this),
-        _registeredSystemEventHandlers(false)
+        _systemServicesNotification(*this)
         {
             LOGINFO("Call constructor");
             m_locateCastTimer.connect( bind( &XCastImplementation::onLocateCastTimer, this ));
@@ -388,26 +386,25 @@ namespace WPEFramework
         {
             if (_networkManagerPlugin)
             {
-                if (Core::ERROR_NONE == _networkManagerPlugin->Register(&_networkManagerNotification))
+                Core::hresult retStatus = _networkManagerPlugin->Register(&_networkManagerNotification);
+                if (Core::ERROR_NONE == retStatus)
                 {
                     LOGINFO("INetworkManager::Register event registered");
-                    _registeredNMEventHandlers = true;
                 }
                 else
                 {
-                    LOGERR("Failed to register INetworkManager::Register event");
-                    _registeredNMEventHandlers = false;
+                    LOGERR("Failed to register INetworkManager::Register event,Error[%x]",retStatus);
                 }
             }
         }
 
         void XCastImplementation::unregisterNetworkEventHandlers()
         {
-            if (_registeredNMEventHandlers && _networkManagerPlugin)
+            if ( _networkManagerPlugin )
             {
+                // Unregister should be called unconditionally. If not registered, it should be no-op
                 _networkManagerPlugin->Unregister(&_networkManagerNotification);
                 LOGINFO("INetworkManager::Unregister event unregistered");
-                _registeredNMEventHandlers = false;
             }
         }
 
@@ -415,26 +412,25 @@ namespace WPEFramework
         {
             if (_systemServicesPlugin)
             {
-                if (Core::ERROR_NONE == _systemServicesPlugin->Register(&_systemServicesNotification))
+                Core::hresult retStatus = _systemServicesPlugin->Register(&_systemServicesNotification);
+                if (Core::ERROR_NONE == retStatus)
                 {
                     LOGINFO("ISystemServices::Register event registered");
-                    _registeredSystemEventHandlers = true;
                 }
                 else
                 {
-                    LOGERR("Failed to register ISystemServices::Register event");
-                    _registeredSystemEventHandlers = false;
+                    LOGERR("Failed to register ISystemServices::Register event,Error[%x]",retStatus);
                 }
             }
         }
 
         void XCastImplementation::unregisterSystemEventHandlers()
         {
-            if (_registeredSystemEventHandlers && _systemServicesPlugin)
+            if (_systemServicesPlugin)
             {
+                // Unregister should be called unconditionally. If not registered, it should be no-op
                 _systemServicesPlugin->Unregister(&_systemServicesNotification);
                 LOGINFO("ISystemServices::Unregister event unregistered");
-                _registeredSystemEventHandlers = false;
             }
         }
 
