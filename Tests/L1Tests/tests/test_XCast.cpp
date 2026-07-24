@@ -81,8 +81,9 @@ public:
     Core::hresult SupportedAudioPorts(WPEFramework::Exchange::IDeviceInfo::IStringIterator*& supportedAudioPorts, bool& success) const override { return Core::ERROR_NONE; }
 
     // IUnknown interface methods - simple implementations
-    void AddRef() const override {
+    uint32_t AddRef() const override {
         // Mock implementation - do nothing in tests
+        return Core::ERROR_NONE;
     }
 
     uint32_t Release() const override {
