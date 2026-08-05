@@ -12,7 +12,7 @@ env:
   BUILD_TYPE: Debug
   REPO_NAME: "entservices-xcast"
   THUNDER_REF: "R4.4.1"
-  INTERFACES_REF: "develop"
+  INTERFACES_REF: "4.0.8"
   ENABLE_CACHE: "false"
   AUTOMATICS_UNAME: ${{ secrets.AUTOMATICS_UNAME}}
   AUTOMATICS_PASSCODE: ${{ secrets. AUTOMATICS_PASSCODE}}
