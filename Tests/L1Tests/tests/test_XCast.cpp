@@ -81,8 +81,9 @@ public:
     Core::hresult SupportedAudioPorts(WPEFramework::Exchange::IDeviceInfo::IStringIterator*& supportedAudioPorts, bool& success) const override { return Core::ERROR_NONE; }
 
     // IUnknown interface methods - simple implementations
-    void AddRef() const override {
+    uint32_t AddRef() const override {
         // Mock implementation - do nothing in tests
+        return Core::ERROR_NONE;
     }
 
     uint32_t Release() const override {
@@ -677,13 +678,14 @@ TEST_F(XCastTest, onApplicationLaunchRequest)
             [&](const uint32_t, const Core::ProxyType<Core::JSON::IElement>& json) {
                 string text;
                 EXPECT_TRUE(json->ToString(text));
-                EXPECT_EQ(text, string(_T("{\"jsonrpc\":\"2.0\",\"method\":\"client.events.onApplicationLaunchRequest\",\"params\":{\"applicationName\":\"Youtube\",\"strPayLoad\":\"youtube_payload\",\"strQuery\":\"source_type=12\",\"strAddDataUrl\":\"http:\\/\\/youtube.com\"}}")));
+                EXPECT_EQ(text, string(_T("{\"jsonrpc\":\"2.0\",\"method\":\"client.events.onApplicationLaunchRequestWithParam\",\"params\":{\"applicationName\":\"Youtube\",\"strPayLoad\":\"youtube_payload\",\"strQuery\":\"source_type=12\",\"strAddDataUrl\":\"http:\\/\\/youtube.com\"}}")));
                 TEST_LOG("LaunchRequest with param event received");
                 onLaunchRequestParam.SetEvent();
                 return Core::ERROR_NONE;
             }));
 
     EVENT_SUBSCRIBE(0, _T("onApplicationLaunchRequest"), _T("client.events"), message);
+    EVENT_SUBSCRIBE(0, _T("onApplicationLaunchRequestWithParam"), _T("client.events"), message);
 
     GDialNotifier* gdialNotifier = gdialService::getObserverHandle();
     ASSERT_NE(gdialNotifier, nullptr);
@@ -693,6 +695,7 @@ TEST_F(XCastTest, onApplicationLaunchRequest)
     gdialNotifier->onApplicationLaunchRequestWithLaunchParam("Youtube", "youtube_payload", "source_type=12", "http://youtube.com");
     EXPECT_EQ(Core::ERROR_NONE, onLaunchRequestParam.Lock(5000));
 
+    EVENT_UNSUBSCRIBE(0, _T("onApplicationLaunchRequestWithParam"), _T("client.events"), message);
     EVENT_UNSUBSCRIBE(0, _T("onApplicationLaunchRequest"), _T("client.events"), message);
 
     if (Core::ERROR_NONE == status)
