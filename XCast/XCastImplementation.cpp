@@ -83,7 +83,10 @@ namespace WPEFramework
         _adminLock(),
         _networkManagerNotification(*this),
         _systemServicesPlugin(nullptr),
-        _systemServicesNotification(*this)
+        _systemServicesNotification(*this),
+        _appManagerPlugin(nullptr),
+        _appManagerNotification(*this),
+        _appActionsPlugin(nullptr)
         {
             LOGINFO("Call constructor");
             m_locateCastTimer.connect( bind( &XCastImplementation::onLocateCastTimer, this ));
@@ -195,6 +198,17 @@ namespace WPEFramework
                 _systemServicesPlugin->Release();
                 _systemServicesPlugin = nullptr;
             }
+            unregisterAppManagerEventHandlers();
+            if (_appManagerPlugin)
+            {
+                _appManagerPlugin->Release();
+                _appManagerPlugin = nullptr;
+            }
+            if (_appActionsPlugin)
+            {
+                _appActionsPlugin->Release();
+                _appActionsPlugin = nullptr;
+            }
             LOGINFO("Exiting ...");
         }
 
@@ -303,6 +317,8 @@ namespace WPEFramework
                 InitializeNetworkManager(service);
                 Initialize(m_networkStandbyMode);
                 InitializeSystemServices(service);
+                InitializeAppManager(service);
+                InitializeAppActions(service);
                 if (Core::ERROR_NONE == updateSystemFriendlyName())
                 {
                     LOGINFO("updateSystemFriendlyName successfully [%s]",m_friendlyName.c_str());
@@ -335,6 +351,7 @@ namespace WPEFramework
             if (_powerManagerPlugin) {
                 LOGINFO("PowerManagerInterfaceBuilder created successfully");
                 checkPowerAndNetworkStandbyStates();
+                registerPowerEventHandlers();
             }
             else {
                 LOGERR("Failed to get PowerManager instance");
@@ -362,11 +379,27 @@ namespace WPEFramework
         {
             ASSERT (_powerManagerPlugin);
             if(!_registeredPowerEventHandlers && _powerManagerPlugin) {
-                _powerManagerPlugin->Register(_pwrMgrNotification.baseInterface<Exchange::IPowerManager::INetworkStandbyModeChangedNotification>());
-                LOGINFO("INetworkStandbyModeChangedNotification event registered");
-                _powerManagerPlugin->Register(_pwrMgrNotification.baseInterface<Exchange::IPowerManager::IModeChangedNotification>());
-                LOGINFO("IModeChangedNotification event registered");
-                _registeredPowerEventHandlers = true;
+                const Core::hresult networkStandbyStatus = _powerManagerPlugin->Register(
+                    _pwrMgrNotification.baseInterface<Exchange::IPowerManager::INetworkStandbyModeChangedNotification>());
+                const Core::hresult powerModeStatus = _powerManagerPlugin->Register(
+                    _pwrMgrNotification.baseInterface<Exchange::IPowerManager::IModeChangedNotification>());
+
+                if ((Core::ERROR_NONE == networkStandbyStatus) && (Core::ERROR_NONE == powerModeStatus)) {
+                    LOGINFO("PowerManager event notifications registered");
+                    _registeredPowerEventHandlers = true;
+                }
+                else {
+                    LOGERR("Failed to register PowerManager event notifications: network standby[%x], power mode[%x]",
+                        networkStandbyStatus, powerModeStatus);
+                    if (Core::ERROR_NONE == networkStandbyStatus) {
+                        _powerManagerPlugin->Unregister(
+                            _pwrMgrNotification.baseInterface<Exchange::IPowerManager::INetworkStandbyModeChangedNotification>());
+                    }
+                    if (Core::ERROR_NONE == powerModeStatus) {
+                        _powerManagerPlugin->Unregister(
+                            _pwrMgrNotification.baseInterface<Exchange::IPowerManager::IModeChangedNotification>());
+                    }
+                }
             }
         }
 
@@ -431,6 +464,146 @@ namespace WPEFramework
                 // Unregister should be called unconditionally. If not registered, it should be no-op
                 _systemServicesPlugin->Unregister(&_systemServicesNotification);
                 LOGINFO("ISystemServices::Unregister event unregistered");
+            }
+        }
+
+        void XCastImplementation::InitializeAppManager(PluginHost::IShell* service)
+        {
+            if (nullptr == _appManagerPlugin)
+            {
+                _appManagerPlugin = service->QueryInterfaceByCallsign<WPEFramework::Exchange::IAppManager>("org.rdk.AppManager");
+                if (_appManagerPlugin != nullptr)
+                {
+                    registerAppManagerEventHandlers();
+                }
+                else
+                {
+                    LOGERR("Failed to get AppManager instance");
+                }
+            }
+        }
+
+        void XCastImplementation::registerAppManagerEventHandlers()
+        {
+            if (_appManagerPlugin)
+            {
+                Core::hresult retStatus = _appManagerPlugin->Register(&_appManagerNotification);
+                if (Core::ERROR_NONE == retStatus)
+                {
+                    LOGINFO("IAppManager::Register event registered");
+                }
+                else
+                {
+                    LOGERR("Failed to register IAppManager::Register event, Error[%x]", retStatus);
+                }
+            }
+        }
+
+        void XCastImplementation::unregisterAppManagerEventHandlers()
+        {
+            if (_appManagerPlugin)
+            {
+                _appManagerPlugin->Unregister(&_appManagerNotification);
+                LOGINFO("IAppManager::Unregister event unregistered");
+            }
+        }
+
+        void XCastImplementation::onAppLifecycleStateChanged(const string& appId, const string& appInstanceId,
+            const Exchange::IAppManager::AppLifecycleState newState,
+            const Exchange::IAppManager::AppLifecycleState oldState,
+            const Exchange::IAppManager::AppErrorReason errorReason)
+        {
+            LOGINFO("onAppLifecycleStateChanged appId[%s] instanceId[%s] state[%d -> %d] errorReason[%d]",
+                appId.c_str(), appInstanceId.c_str(),
+                static_cast<int>(oldState), static_cast<int>(newState),
+                static_cast<int>(errorReason));
+
+            if (nullptr == m_xcast_manager)
+            {
+                return;
+            }
+
+            // Only forward state changes for apps registered via RegisterApplications
+            bool appFound = false;
+            string appName;
+            {
+                lock_guard<mutex> lck(m_appConfigMutex);
+                for (const DynamicAppConfig* pConfig : m_appConfigCache)
+                {
+                    if ((0 == strcmp(pConfig->appId, appId.c_str())) ||
+                        ((pConfig->appId[0] == '\0') && (0 == strcmp(pConfig->appName, appId.c_str()))))
+                    {
+                        appFound = true;
+                        appName = pConfig->appName;
+                        break;
+                    }
+                }
+            }
+
+            if (!appFound)
+            {
+                LOGINFO("App[%s] not in registered app cache, skipping state update", appId.c_str());
+                return;
+            }
+
+            string appstate;
+            switch (newState)
+            {
+                case Exchange::IAppManager::APP_STATE_LOADING:
+                case Exchange::IAppManager::APP_STATE_INITIALIZING:
+                case Exchange::IAppManager::APP_STATE_RUNNING:
+                case Exchange::IAppManager::APP_STATE_ACTIVE:
+                    appstate = "running";
+                    break;
+                case Exchange::IAppManager::APP_STATE_PAUSED:
+                case Exchange::IAppManager::APP_STATE_SUSPENDED:
+                case Exchange::IAppManager::APP_STATE_HIBERNATED:
+                    appstate = "suspended";
+                    break;
+                case Exchange::IAppManager::APP_STATE_UNLOADED:
+                case Exchange::IAppManager::APP_STATE_TERMINATING:
+                    appstate = "stopped";
+                    break;
+                default:
+                    LOGWARN("Unhandled AppLifecycleState[%d] for app[%s], skipping",
+                        static_cast<int>(newState), appId.c_str());
+                    return;
+            }
+
+            string errorStr = (errorReason == Exchange::IAppManager::APP_ERROR_NONE) ? "none" : "internal";
+
+            LOGINFO("applicationStateChanged app[%s] appId[%s] instanceId[%s] state[%s] error[%s]",
+                appName.c_str(), appId.c_str(), appInstanceId.c_str(), appstate.c_str(), errorStr.c_str());
+            m_xcast_manager->applicationStateChanged(appName, appstate, appInstanceId, errorStr);
+        }
+
+        void XCastImplementation::InitializeAppActions(PluginHost::IShell* service)
+        {
+            if (nullptr == _appActionsPlugin)
+            {
+                _appActionsPlugin = service->QueryInterfaceByCallsign<WPEFramework::Exchange::IAppActions>("org.rdk.AppActions");
+                if (nullptr == _appActionsPlugin)
+                {
+                    LOGERR("Failed to get AppActions instance");
+                }
+            }
+        }
+
+        void XCastImplementation::notifyAppActionsLaunch(const string& appName, const string& intent)
+        {
+            LOGWARN("AppActions notifyAppActionsLaunch appName: %s", appName.c_str());
+            if (_appActionsPlugin)
+            {
+                Core::hresult result = _appActionsPlugin->ActionStart("XCast", intent, appName);
+                if (Core::ERROR_NONE != result)
+                {
+                    LOGERR("AppActions::ActionStart failed for app[%s] intent[%s], Error[%x]",
+                        appName.c_str(), intent.c_str(), result);
+                }
+            }
+            else
+            {
+                LOGWARN("AppActions plugin not available, skipping ActionStart for app[%s]", appName.c_str());
             }
         }
 
@@ -501,6 +674,7 @@ namespace WPEFramework
         {
             LOGINFO("[EVENT] appName[%s], strPayLoad[%s], strQuery[%s], strAddDataUrl[%s]",
                     appName.c_str(),strPayLoad.c_str(),strQuery.c_str(),strAddDataUrl.c_str());
+            notifyAppActionsLaunch(appName, "Launch");
             JsonObject params;
             params["appName"]  = appName.c_str();
             params["strPayLoad"]  = strPayLoad.c_str();
@@ -512,6 +686,7 @@ namespace WPEFramework
         void XCastImplementation::onXcastApplicationLaunchRequest(string appName, string parameter)
         {
             LOGINFO("[EVENT] appName[%s], parameter[%s]",appName.c_str(),parameter.c_str());
+            notifyAppActionsLaunch(appName, "Launch");
             JsonObject params;
             params["appName"]  = appName.c_str();
             params["parameter"]  = parameter.c_str();
@@ -521,6 +696,7 @@ namespace WPEFramework
         void XCastImplementation::onXcastApplicationStopRequest(string appName, string appId)
         {
             LOGINFO("[EVENT] appName[%s], appId[%s]",appName.c_str(),appId.c_str());
+            notifyAppActionsLaunch(appName, "Stop");
             JsonObject params;
             params["appName"]  = appName.c_str();
             params["appId"]  = appId.c_str();
@@ -530,6 +706,7 @@ namespace WPEFramework
         void XCastImplementation::onXcastApplicationHideRequest(string appName, string appId)
         {
             LOGINFO("[EVENT] appName[%s], appId[%s]",appName.c_str(),appId.c_str());
+            notifyAppActionsLaunch(appName, "Hide");
             JsonObject params;
             params["appName"]  = appName.c_str();
             params["appId"]  = appId.c_str();
@@ -539,6 +716,7 @@ namespace WPEFramework
         void XCastImplementation::onXcastApplicationResumeRequest(string appName, string appId)
         {
             LOGINFO("[EVENT] appName[%s], appId[%s]",appName.c_str(),appId.c_str());
+            notifyAppActionsLaunch(appName, "Resume");
             JsonObject params;
             params["appName"]  = appName.c_str();
             params["appId"]  = appId.c_str();
@@ -844,8 +1022,9 @@ namespace WPEFramework
             LOGINFO ("=================Current Apps[%s] size[%d] ===========================", strListName.c_str(), (int)appConfigList.size());
             for (DynamicAppConfig* pDynamicAppConfig : appConfigList)
             {
-                LOGINFO ("Apps: appName:%s, prefixes:%s, cors:%s, allowStop:%d, query:%s, payload:%s",
+                LOGINFO ("Apps: appName:%s, appId:%s, prefixes:%s, cors:%s, allowStop:%d, query:%s, payload:%s",
                             pDynamicAppConfig->appName,
+                            pDynamicAppConfig->appId,
                             pDynamicAppConfig->prefixes,
                             pDynamicAppConfig->cors,
                             pDynamicAppConfig->allowStop,
@@ -1014,11 +1193,6 @@ namespace WPEFramework
             if (m_xcastEnable && ( (m_standbyBehavior == true) || ((m_standbyBehavior == false)&&(m_powerState == WPEFramework::Exchange::IPowerManager::POWER_STATE_ON))))
             {
                 isEnabled = true;
-                registerPowerEventHandlers();
-            }
-            else
-            {
-                unregisterPowerEventHandlers();
             }
             LOGINFO("m_xcastEnable[%d], isEnabled[%d]" , m_xcastEnable, isEnabled);
             enableCastService(m_friendlyName,isEnabled);
@@ -1157,6 +1331,10 @@ namespace WPEFramework
                         strncpy (pDynamicAppConfig->appName, appInfo.appName.c_str(), sizeof(pDynamicAppConfig->appName) - 1);
                         pDynamicAppConfig->appName[sizeof(pDynamicAppConfig->appName) - 1] = '\0';
 
+                        memset (pDynamicAppConfig->appId, '\0', sizeof(pDynamicAppConfig->appId));
+                        strncpy (pDynamicAppConfig->appId, appInfo.appId.c_str(), sizeof(pDynamicAppConfig->appId) - 1);
+                        pDynamicAppConfig->appId[sizeof(pDynamicAppConfig->appId) - 1] = '\0';
+
                         memset (pDynamicAppConfig->prefixes, '\0', sizeof(pDynamicAppConfig->prefixes));
                         strncpy (pDynamicAppConfig->prefixes, appInfo.prefixes.c_str(), sizeof(pDynamicAppConfig->prefixes) - 1);
                         pDynamicAppConfig->prefixes[sizeof(pDynamicAppConfig->prefixes) - 1] = '\0';
@@ -1175,8 +1353,9 @@ namespace WPEFramework
 
                         pDynamicAppConfig->allowStop = appInfo.allowStop ? true : false;
 
-                        LOGINFO("appName[%s], prefixes[%s], cors[%s], allowStop[%d], query[%s], payload[%s]",
+                        LOGINFO("appName[%s], appId[%s], prefixes[%s], cors[%s], allowStop[%d], query[%s], payload[%s]",
                                 pDynamicAppConfig->appName,
+                            pDynamicAppConfig->appId,
                                 pDynamicAppConfig->prefixes,
                                 pDynamicAppConfig->cors,
                                 pDynamicAppConfig->allowStop,
