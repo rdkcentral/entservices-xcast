@@ -438,7 +438,7 @@ bool XCastManager::envGetValue(const char *key, std::string &value)
 int XCastManager::applicationStateChanged( const string& app, const string& state, const string& id, const string& error)
 {
     int status = 0;
-    LOGINFO("AppName[%s] AppState[%s] AppID[%s] Error[%s]", app.c_str(), id.c_str() , state.c_str() , error.c_str());
+    LOGINFO("AppName[%s] AppState[%s] AppID[%s] Error[%s]", app.c_str(), state.c_str() , id.c_str() , error.c_str());
     lock_guard<recursive_mutex> lock(m_mutexSync);
     if (gdialCastObj != NULL)
     {

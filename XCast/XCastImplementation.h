@@ -26,6 +26,8 @@
 #include <interfaces/IConfiguration.h>
 #include <interfaces/INetworkManager.h>
 #include <interfaces/ISystemServices.h>
+#include <interfaces/IAppManager.h>
+#include <interfaces/IAppActions.h>
  
 #include <com/com.h>
 #include <core/core.h>
@@ -232,6 +234,40 @@ namespace WPEFramework
                 private:
                     XCastImplementation& _parent;
            };
+
+            class AppManagerNotification : public Exchange::IAppManager::INotification
+            {
+                private:
+                    AppManagerNotification(const AppManagerNotification&) = delete;
+                    AppManagerNotification& operator=(const AppManagerNotification&) = delete;
+
+                public:
+                    explicit AppManagerNotification(XCastImplementation& parent)
+                    : _parent(parent)
+                    {
+                    }
+                    ~AppManagerNotification() override = default;
+
+                public:
+                    void OnAppLifecycleStateChanged(const string& appId, const string& appInstanceId,
+                        const Exchange::IAppManager::AppLifecycleState newState,
+                        const Exchange::IAppManager::AppLifecycleState oldState,
+                        const Exchange::IAppManager::AppErrorReason errorReason) override
+                    {
+                        LOGINFO("OnAppLifecycleStateChanged appId[%s] instanceId[%s] state[%d -> %d] error[%d]",
+                            appId.c_str(), appInstanceId.c_str(),
+                            static_cast<int>(oldState), static_cast<int>(newState),
+                            static_cast<int>(errorReason));
+                        _parent.onAppLifecycleStateChanged(appId, appInstanceId, newState, oldState, errorReason);
+                    }
+
+                    BEGIN_INTERFACE_MAP(AppManagerNotification)
+                    INTERFACE_ENTRY(Exchange::IAppManager::INotification)
+                    END_INTERFACE_MAP
+
+                private:
+                    XCastImplementation& _parent;
+           };
  
         public:
             Core::hresult Register(Exchange::IXCast::INotification *notification) override;
@@ -290,6 +326,11 @@ namespace WPEFramework
             Exchange::ISystemServices* _systemServicesPlugin;
             Core::Sink<SystemServicesNotification> _systemServicesNotification;
 
+            Exchange::IAppManager* _appManagerPlugin;
+            Core::Sink<AppManagerNotification> _appManagerNotification;
+
+            Exchange::IAppActions* _appActionsPlugin;
+
             void dumpDynamicAppCacheList(string strListName, std::vector<DynamicAppConfig*>& appConfigList);
             bool deleteFromDynamicAppCache(vector<string>& appsToDelete);
 
@@ -329,6 +370,17 @@ namespace WPEFramework
             int updateSystemFriendlyName();
             void threadSystemFriendlyNameChangeEvent(void);
             void onFriendlyNameUpdateHandler(const string& friendlyName);
+
+            void registerAppManagerEventHandlers();
+            void unregisterAppManagerEventHandlers();
+            void InitializeAppManager(PluginHost::IShell* service);
+            void onAppLifecycleStateChanged(const string& appId, const string& appInstanceId,
+                const Exchange::IAppManager::AppLifecycleState newState,
+                const Exchange::IAppManager::AppLifecycleState oldState,
+                const Exchange::IAppManager::AppErrorReason errorReason);
+
+            void InitializeAppActions(PluginHost::IShell* service);
+            void notifyAppActionsLaunch(const string& appName, const string& intent);
             
             void onXcastUpdatePowerStateRequest(string powerState);
             uint32_t SetNetworkStandbyMode(bool networkStandbyMode);

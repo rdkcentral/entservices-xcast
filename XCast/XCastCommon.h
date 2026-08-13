@@ -31,6 +31,7 @@
 
 typedef struct _DynamicAppConfig {
     char appName[64];
+    char appId[64];
     char prefixes[128];
     char cors[128];
     int  allowStop = 0; //Default allowStop value is false
@@ -40,6 +41,7 @@ typedef struct _DynamicAppConfig {
     public:
        _DynamicAppConfig(){
            memset (appName, '\0', sizeof(appName));
+           memset (appId, '\0', sizeof(appId));
            memset (prefixes, '\0', sizeof(prefixes));
            memset (cors, '\0', sizeof(cors));
            memset (query, '\0', sizeof(query));
