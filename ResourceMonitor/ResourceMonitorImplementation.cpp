@@ -37,6 +37,7 @@ namespace Plugin {
         LOGINFO("ResourceMonitorImplementation constructed");
     }
 
+    //Release all registered notifications and clear the list
     ResourceMonitorImplementation::~ResourceMonitorImplementation()
     {
         LOGINFO("ResourceMonitorImplementation destroyed");
@@ -126,7 +127,7 @@ namespace Plugin {
         return Core::ERROR_NONE;
     }
 
-    Core::hresult ResourceMonitorImplementation::GetSystemResourceInfo(const string& topresult)
+    Core::hresult ResourceMonitorImplementation::GetSystemResourceInfo(string& topresult)
     {
         // TODO: populate topresult with JSON-formatted system resource data
         LOGINFO("GetSystemResourceInfo called");

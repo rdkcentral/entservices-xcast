@@ -29,7 +29,7 @@ namespace Plugin {
         // IResourceMonitor APIs
         Core::hresult GetApiVersionNumber(int& version) override;
         Core::hresult GetState() override;
-        Core::hresult GetSystemResourceInfo(const string& topresult) override;
+        Core::hresult GetSystemResourceInfo(string& topresult) override;
         Core::hresult KillProcess(int PID, bool& result) override;
 
         BEGIN_INTERFACE_MAP(ResourceMonitorImplementation)
@@ -40,6 +40,9 @@ namespace Plugin {
         // Fires OnProcessKilled to all registered listeners
         void NotifyProcessKilled(const string& processName, int pid, int exitCode);
 
+        // //Internal method to handle GetsystemResourceInfo
+        // Core::hresult GetSystemResourceInfoInternal(const string& topresult);
+        
         mutable Core::CriticalSection _adminLock;
         std::list<Exchange::IResourceMonitor::IProcessKilledNotification*> _processKilledNotifications;
     };
