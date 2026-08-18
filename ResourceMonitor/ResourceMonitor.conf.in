@@ -1,0 +1,5 @@
+#This is the config file that you see in the device
+
+precondition = ["Platform"]
+callsign = "org.rdk.ResourceMonitor"
+startuporder = "@PLUGIN_RESOURCEMONITOR_STARTUPORDER@"
