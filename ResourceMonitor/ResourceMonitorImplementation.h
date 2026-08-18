@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Module.h"
+#include "UtilsLogging.h"
 #include <interfaces/Ids.h>
 #include <interfaces/IResourceMonitor.h>
 
