@@ -21,7 +21,7 @@ set(PLUGIN_IMPLEMENTATION ${MODULE_NAME}Implementation)
 
 set(PLUGIN_RESOURCEMONITOR_AUTOSTART  "true"  CACHE STRING "Automatically start ResourceMonitor plugin")
 set(PLUGIN_RESOURCEMONITOR_STARTUPORDER ""    CACHE STRING "Startup order of ResourceMonitor plugin")
-set(PLUGIN_RESOURCEMONITOR_MODE       "Local" CACHE STRING "Run mode: Local (out-of-process), InProcess, or Remote")
+set(PLUGIN_RESOURCEMONITOR_MODE       "Local" CACHE STRING "Controls if the plugin should run in its own process, in process or remote")
 
 find_package(${NAMESPACE}Plugins     REQUIRED)
 find_package(${NAMESPACE}Definitions REQUIRED)
