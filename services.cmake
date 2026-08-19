@@ -15,18 +15,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-cmake_minimum_required(VERSION 3.3)
-
-find_package(WPEFramework)
-
-# Library installation section
-string(TOLOWER ${NAMESPACE} STORAGE_DIRECTORY)
-
-# for writing pc and config files
-include(CmakeHelperFunctions)
-
-option(PLUGIN_PROCESSHANDLER "Enable ProcessHandler plugin" ON)
-
-if(PLUGIN_PROCESSHANDLER)
-    add_subdirectory(ProcessHandler)
-endif()
+#
+# Feature flags – each maps to the subdirectory of the same name.
+#
+option(PLUGIN_PROCESSHANDLER "Enable the ProcessHandler out-of-process plugin" OFF)

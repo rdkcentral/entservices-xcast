@@ -18,8 +18,9 @@
  */
 
 #pragma once
+
 #ifndef MODULE_NAME
-#define MODULE_NAME Plugin_ResourceMonitor
+#define MODULE_NAME Plugin_ProcessHandler
 #endif
 
 #include <plugins/plugins.h>
