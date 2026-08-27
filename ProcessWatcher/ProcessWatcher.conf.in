@@ -1,0 +1,11 @@
+#This is the config file that you see in the device
+
+precondition = ["Platform"]
+callsign = "org.rdk.ProcessWatcher"
+startuporder = "@PLUGIN_PROCESSWATCHER_STARTUPORDER@"
+
+configuration = JSON()
+rootobject = JSON()
+rootobject.add("mode",    "@PLUGIN_PROCESSWATCHER_MODE@")
+rootobject.add("locator", "lib@PLUGIN_IMPLEMENTATION@.so")
+configuration.add("root", rootobject)
