@@ -22,6 +22,7 @@
 #include "Module.h"
 #include <interfaces/IProcessWatcher.h>
 #include <interfaces/IResourceMonitor.h>
+#include <interfaces/JProcessWatcher.h>
 #include "UtilsLogging.h"
 #include "tracing/Logging.h"
 
@@ -125,6 +126,7 @@ namespace Plugin {
 
     private:
         void Deactivated(RPC::IRemoteConnection* connection);
+        bool KillProcessViaResourceMonitor(int pid);
 
     private:
         PluginHost::IShell*               _service{};
