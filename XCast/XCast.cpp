@@ -71,16 +71,24 @@ namespace WPEFramework
 
             _service = service;
             _service->AddRef();
+            LOGINFO("PROFILE: XCast::Initialize: IShell Register notification start");
             _service->Register(&_xcastNotification); 
+            LOGINFO("PROFILE: XCast::Initialize: IShell Register notification done");
 
+            LOGINFO("PROFILE: XCast::Initialize: Root<IXCast>(XCastImplementation) start");
             _xcast = _service->Root<Exchange::IXCast>(_connectionId, 5000, _T("XCastImplementation"));
+            LOGINFO("PROFILE: XCast::Initialize: Root<IXCast>(XCastImplementation) done, connId[%u]", _connectionId);
             
             if (nullptr != _xcast)
             {
+                LOGINFO("PROFILE: XCast::Initialize: QueryInterface<IConfiguration> start");
                 mConfigure = _xcast->QueryInterface<Exchange::IConfiguration>();
+                LOGINFO("PROFILE: XCast::Initialize: QueryInterface<IConfiguration> done");
                 if (nullptr != mConfigure)
                 {
+                    LOGINFO("PROFILE: XCast::Initialize: IConfiguration::Configure start");
                     uint32_t result = mConfigure->Configure(_service);
+                    LOGINFO("PROFILE: XCast::Initialize: IConfiguration::Configure done, result[%u]", result);
                     if(result != Core::ERROR_NONE)
                     {
                         message = _T("XCast could not be configured");
@@ -88,11 +96,13 @@ namespace WPEFramework
                     else
                     {
                         LOGINFO("XCastImpl Initialise() successfully");
+                        LOGINFO("PROFILE: XCast::Initialize: notification/JSONRPC registration start");
                         // Register for notifications
                         _xcast->Register(&_xcastNotification);
                         // Invoking Plugin API register to wpeframework
                         Exchange::JXCast::Register(*this, _xcast);
                         m_notificationRegistered = true;
+                        LOGINFO("PROFILE: XCast::Initialize: notification/JSONRPC registration done");
                     }
                 }
                 else
@@ -105,6 +115,8 @@ namespace WPEFramework
                 SYSLOG(Logging::Startup, (_T("XCast::Initialize: Failed to initialise XCast plugin")));
                 message = _T("XCast plugin could not be initialised");
             }
+
+            LOGINFO("PROFILE: XCast::Initialize: Exiting ...");
 
             if (0 != message.length())
             {

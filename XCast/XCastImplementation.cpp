@@ -154,14 +154,19 @@ namespace WPEFramework
             if(nullptr == m_xcast_manager)
             {
                 m_networkStandbyMode = networkStandbyMode;
+                LOGINFO("PROFILE: Initialize: XCastManager::getInstance start");
                 m_xcast_manager  = XCastManager::getInstance();
+                LOGINFO("PROFILE: Initialize: XCastManager::getInstance done");
                 if(nullptr != m_xcast_manager)
                 {
                     m_xcast_manager->setService(this);
+                    LOGINFO("PROFILE: Initialize: connectToGDialService start");
                     if( false == connectToGDialService())
                     {
+                        LOGINFO("PROFILE: Initialize: connectToGDialService failed, starting locate cast timer");
                         startTimer(LOCATE_CAST_FIRST_TIMEOUT_IN_MILLIS);
                     }
+                    LOGINFO("PROFILE: Initialize: connectToGDialService done");
                 }
                 else {
                     LOGERR("Failed to get XCastManager instance");
@@ -221,10 +226,14 @@ namespace WPEFramework
         {
             if (nullptr == _systemServicesPlugin)
             {
+                LOGINFO("PROFILE: InitializeSystemServices: QueryInterfaceByCallsign[org.rdk.System] start");
                 _systemServicesPlugin = service->QueryInterfaceByCallsign<WPEFramework::Exchange::ISystemServices>("org.rdk.System");
+                LOGINFO("PROFILE: InitializeSystemServices: QueryInterfaceByCallsign[org.rdk.System] done");
                 if (_systemServicesPlugin != nullptr)
                 {
+                    LOGINFO("PROFILE: InitializeSystemServices: registerSystemEventHandlers start");
                     registerSystemEventHandlers();
+                    LOGINFO("PROFILE: InitializeSystemServices: registerSystemEventHandlers done");
                 }
                 else
                 {
@@ -244,7 +253,9 @@ namespace WPEFramework
                 return Core::ERROR_GENERAL;
             }
 
+            LOGINFO("PROFILE: updateSystemFriendlyName: GetFriendlyName start");
             auto ret = _systemServicesPlugin->GetFriendlyName(friendlyName, success);
+            LOGINFO("PROFILE: updateSystemFriendlyName: GetFriendlyName done, ret[%u]", ret);
 
             if (Core::ERROR_NONE == ret)
             {
@@ -299,14 +310,24 @@ namespace WPEFramework
                 LOGINFO("Call initialise()");
                 _service = service;
                 _service->AddRef();
+                LOGINFO("PROFILE: Configure: InitializePowerManager start");
                 InitializePowerManager(service);
+                LOGINFO("PROFILE: Configure: InitializePowerManager done");
+                LOGINFO("PROFILE: Configure: InitializeNetworkManager start");
                 InitializeNetworkManager(service);
+                LOGINFO("PROFILE: Configure: InitializeNetworkManager done");
+                LOGINFO("PROFILE: Configure: Initialize start");
                 Initialize(m_networkStandbyMode);
+                LOGINFO("PROFILE: Configure: Initialize done");
+                LOGINFO("PROFILE: Configure: InitializeSystemServices start");
                 InitializeSystemServices(service);
+                LOGINFO("PROFILE: Configure: InitializeSystemServices done");
+                LOGINFO("PROFILE: Configure: updateSystemFriendlyName start");
                 if (Core::ERROR_NONE == updateSystemFriendlyName())
                 {
                     LOGINFO("updateSystemFriendlyName successfully [%s]",m_friendlyName.c_str());
                 }
+                LOGINFO("PROFILE: Configure: updateSystemFriendlyName done");
             }
             else if ((_service) && ( nullptr == service ))
             {
@@ -326,15 +347,19 @@ namespace WPEFramework
         void XCastImplementation::InitializePowerManager(PluginHost::IShell* service)
         {
             LOGINFO("Entering ...");
+            LOGINFO("PROFILE: InitializePowerManager: createInterface start");
             _powerManagerPlugin = PowerManagerInterfaceBuilder(_T("org.rdk.PowerManager"))
                 .withIShell(service)
                 .withRetryIntervalMS(200)
                 .withRetryCount(25)
                 .createInterface();
+            LOGINFO("PROFILE: InitializePowerManager: createInterface done");
 
             if (_powerManagerPlugin) {
                 LOGINFO("PowerManagerInterfaceBuilder created successfully");
+                LOGINFO("PROFILE: InitializePowerManager: checkPowerAndNetworkStandbyStates start");
                 checkPowerAndNetworkStandbyStates();
+                LOGINFO("PROFILE: InitializePowerManager: checkPowerAndNetworkStandbyStates done");
             }
             else {
                 LOGERR("Failed to get PowerManager instance");
@@ -346,10 +371,14 @@ namespace WPEFramework
         {
             if (nullptr == _networkManagerPlugin)
             {
+                LOGINFO("PROFILE: InitializeNetworkManager: QueryInterfaceByCallsign[org.rdk.NetworkManager] start");
                 _networkManagerPlugin = service->QueryInterfaceByCallsign<WPEFramework::Exchange::INetworkManager>("org.rdk.NetworkManager");
+                LOGINFO("PROFILE: InitializeNetworkManager: QueryInterfaceByCallsign[org.rdk.NetworkManager] done");
                 if (_networkManagerPlugin != nullptr)
                 {
+                    LOGINFO("PROFILE: InitializeNetworkManager: registerNetworkEventHandlers start");
                     registerNetworkEventHandlers();
+                    LOGINFO("PROFILE: InitializeNetworkManager: registerNetworkEventHandlers done");
                 }
                 else
                 {
@@ -443,14 +472,18 @@ namespace WPEFramework
 
             ASSERT (_powerManagerPlugin);
             if (_powerManagerPlugin){
+                LOGINFO("PROFILE: checkPowerAndNetworkStandbyStates: GetPowerState start");
                 retStatus = _powerManagerPlugin->GetPowerState(pwrStateCur, pwrStatePrev);
+                LOGINFO("PROFILE: checkPowerAndNetworkStandbyStates: GetPowerState done, ret[%u]", retStatus);
                 if (Core::ERROR_NONE == retStatus)
                 {
                     m_powerState = pwrStateCur;
                     LOGINFO("m_powerState:%d", m_powerState);
                 }
 
+                LOGINFO("PROFILE: checkPowerAndNetworkStandbyStates: GetNetworkStandbyMode start");
                 retStatus = _powerManagerPlugin->GetNetworkStandbyMode(nwStandby);
+                LOGINFO("PROFILE: checkPowerAndNetworkStandbyStates: GetNetworkStandbyMode done, ret[%u]", retStatus);
                 if (Core::ERROR_NONE == retStatus)
                 {
                     m_networkStandbyMode = nwStandby;
@@ -573,10 +606,14 @@ namespace WPEFramework
                 return false;
             }
 
+            LOGINFO("PROFILE: connectToGDialService: getDefaultNameAndIPAddress start");
             getDefaultNameAndIPAddress(interface,ipaddress);
+            LOGINFO("PROFILE: connectToGDialService: getDefaultNameAndIPAddress done");
             if (!interface.empty())
             {
+                LOGINFO("PROFILE: connectToGDialService: XCastManager::initialize start");
                 status = m_xcast_manager->initialize(_service, interface, m_networkStandbyMode);
+                LOGINFO("PROFILE: connectToGDialService: XCastManager::initialize done, status[%u]", status);
                 if( true == status)
                 {
                     m_activeInterfaceName = getInterfaceNameToType(interface);
@@ -601,7 +638,9 @@ namespace WPEFramework
             LOGINFO("Entering ...");
             bool returnValue = false;
 
+            LOGINFO("PROFILE: getDefaultNameAndIPAddress: InitializeNetworkManager start");
             InitializeNetworkManager(_service);
+            LOGINFO("PROFILE: getDefaultNameAndIPAddress: InitializeNetworkManager done");
 
             if (nullptr == _networkManagerPlugin)
             {
@@ -610,7 +649,9 @@ namespace WPEFramework
             }
 
             uint32_t rc = Core::ERROR_GENERAL;
+            LOGINFO("PROFILE: getDefaultNameAndIPAddress: GetPrimaryInterface start");
             rc = _networkManagerPlugin->GetPrimaryInterface(interface);
+            LOGINFO("PROFILE: getDefaultNameAndIPAddress: GetPrimaryInterface done, rc[%u]", rc);
 
             if (Core::ERROR_NONE != rc)
             {
@@ -621,7 +662,9 @@ namespace WPEFramework
                 Exchange::INetworkManager::IPAddress address{};
 
                 LOGINFO("Primary Interface is [%s]",interface.c_str());
+                LOGINFO("PROFILE: getDefaultNameAndIPAddress: GetIPSettings start");
                 rc = _networkManagerPlugin->GetIPSettings(interface, "IPv4", address);
+                LOGINFO("PROFILE: getDefaultNameAndIPAddress: GetIPSettings done, rc[%u]", rc);
 
                 if (Core::ERROR_NONE != rc)
                 {
