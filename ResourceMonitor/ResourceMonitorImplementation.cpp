@@ -33,8 +33,11 @@ namespace Plugin {
     ResourceMonitorImplementation::ResourceMonitorImplementation()
         : _adminLock()
         , _processKilledNotifications()
+        , _initializationNotifications()
+        , _initialized(false)
     {
         LOGINFO("ResourceMonitorImplementation constructed");
+        _initialized = true;
     }
 
     //Release all registered notifications and clear the list
@@ -46,6 +49,10 @@ namespace Plugin {
             notification->Release();
         }
         _processKilledNotifications.clear();
+        for (auto* notification : _initializationNotifications) {
+            notification->Release();
+        }
+        _initializationNotifications.clear();
         _adminLock.Unlock();
     }
 
@@ -94,6 +101,53 @@ namespace Plugin {
         return status;
     }
 
+    Core::hresult ResourceMonitorImplementation::Register(
+        Exchange::IResourceMonitor::IInitializationNotification* notification)
+    {
+        ASSERT(notification != nullptr);
+
+        _adminLock.Lock();
+        auto it = std::find(_initializationNotifications.begin(),
+                            _initializationNotifications.end(), notification);
+        if (it == _initializationNotifications.end()) {
+            _initializationNotifications.push_back(notification);
+            notification->AddRef();
+            LOGINFO("Registered IInitializationNotification %p", notification);
+            const bool notify = _initialized;
+            _adminLock.Unlock();
+            if (notify) {
+                notification->OnInitialized();
+            }
+            return Core::ERROR_NONE;
+        } else {
+            LOGERR("IInitializationNotification %p already registered", notification);
+        }
+        _adminLock.Unlock();
+        return Core::ERROR_NONE;
+    }
+
+    Core::hresult ResourceMonitorImplementation::Unregister(
+        const Exchange::IResourceMonitor::IInitializationNotification* notification)
+    {
+        ASSERT(notification != nullptr);
+
+        Core::hresult status = Core::ERROR_GENERAL;
+
+        _adminLock.Lock();
+        auto it = std::find(_initializationNotifications.begin(),
+                            _initializationNotifications.end(), notification);
+        if (it != _initializationNotifications.end()) {
+            (*it)->Release();
+            _initializationNotifications.erase(it);
+            LOGINFO("Unregistered IInitializationNotification");
+            status = Core::ERROR_NONE;
+        } else {
+            LOGERR("IInitializationNotification not found");
+        }
+        _adminLock.Unlock();
+        return status;
+    }
+
     // -------------------------------------------------------------------------
     // Event firing helper
     // -------------------------------------------------------------------------
@@ -106,6 +160,15 @@ namespace Plugin {
         while (it != _processKilledNotifications.end()) {
             (*it)->OnProcessKilled(processName, pid, exitCode);
             ++it;
+        }
+        _adminLock.Unlock();
+    }
+
+    void ResourceMonitorImplementation::NotifyInitialized()
+    {
+        _adminLock.Lock();
+        for (auto* notification : _initializationNotifications) {
+            notification->OnInitialized();
         }
         _adminLock.Unlock();
     }

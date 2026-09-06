@@ -35,7 +35,6 @@ namespace Plugin {
         // Implements two interfaces:
         //   1. IResourceMonitor::IProcessKilledNotification
         //      → receives COM events from ResourceMonitorImplementation
-        //      → translates them into JSON-RPC events (JResourceMonitor::Event::*)
         //
         //   2. RPC::IRemoteConnection::INotification
         //      → watches the out-of-process connection; if the impl crashes,

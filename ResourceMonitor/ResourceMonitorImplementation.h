@@ -26,6 +26,8 @@ namespace Plugin {
         // IResourceMonitor registration
         Core::hresult Register(Exchange::IResourceMonitor::IProcessKilledNotification* notification) override;
         Core::hresult Unregister(const Exchange::IResourceMonitor::IProcessKilledNotification* notification) override;
+        Core::hresult Register(Exchange::IResourceMonitor::IInitializationNotification* notification) override;
+        Core::hresult Unregister(const Exchange::IResourceMonitor::IInitializationNotification* notification) override;
 
         // IResourceMonitor APIs
         Core::hresult GetApiVersionNumber(int& version) override;
@@ -40,12 +42,16 @@ namespace Plugin {
     private:
         // Fires OnProcessKilled to all registered listeners
         void NotifyProcessKilled(const string& processName, int pid, int exitCode);
+        // Fires OnInitialized to listeners registered before initialization completes.
+        void NotifyInitialized();
 
         // //Internal method to handle GetsystemResourceInfo
         // Core::hresult GetSystemResourceInfoInternal(const string& topresult);
         
         mutable Core::CriticalSection _adminLock;
         std::list<Exchange::IResourceMonitor::IProcessKilledNotification*> _processKilledNotifications;
+        std::list<Exchange::IResourceMonitor::IInitializationNotification*> _initializationNotifications;
+        bool _initialized;
     };
 
 } // namespace Plugin
