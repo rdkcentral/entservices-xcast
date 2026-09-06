@@ -63,7 +63,7 @@ namespace WPEFramework {
         // 1. Instantiates ProcessWatcherImplementation in-process via Root<>.
         // 2. Registers JSON-RPC endpoints; overrides killprocess to delegate
         //    to ResourceMonitor via COM-RPC.
-        // 3. Subscribes to ResourceMonitor kill events via ResourceMonitorSink.
+        // 3. Subscribes to ResourceMonitor events via ResourceMonitorSink.
         // ---------------------------------------------------------------------
         const string ProcessWatcher::Initialize(PluginHost::IShell* service)
         {
@@ -108,11 +108,14 @@ namespace WPEFramework {
                 message = _T("ProcessWatcher out-of-process implementation could not be instantiated");
             }
 
-            // Subscribe to ResourceMonitor kill events
+            // Subscribe to ResourceMonitor events.
             Exchange::IResourceMonitor* rm =
                 service->QueryInterfaceByCallsign<Exchange::IResourceMonitor>("org.rdk.ResourceMonitor");
             if (rm != nullptr) {
-                rm->Register(&_resourceMonitorSink);
+                rm->Register(static_cast<Exchange::IResourceMonitor::IProcessKilledNotification*>(
+                    &_resourceMonitorSink));
+                rm->Register(static_cast<Exchange::IResourceMonitor::IInitializationNotification*>(
+                    &_resourceMonitorSink));
                 _resourceMonitorService = rm;  // keep ref; released after Unregister in Deinitialize
             } else {
                 LOGINFO("ProcessWatcher::Initialize: ResourceMonitor not available, skipping subscription");
@@ -152,7 +155,12 @@ namespace WPEFramework {
 
             if (_service != nullptr) {
                 if (_resourceMonitorService != nullptr) {
-                    _resourceMonitorService->Unregister(&_resourceMonitorSink);
+                    _resourceMonitorService->Unregister(
+                        static_cast<Exchange::IResourceMonitor::IInitializationNotification*>(
+                            &_resourceMonitorSink));
+                    _resourceMonitorService->Unregister(
+                        static_cast<Exchange::IResourceMonitor::IProcessKilledNotification*>(
+                            &_resourceMonitorSink));
                     _resourceMonitorService->Release();
                     _resourceMonitorService = nullptr;
                 }

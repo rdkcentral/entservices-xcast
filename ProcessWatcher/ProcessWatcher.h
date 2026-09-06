@@ -80,8 +80,9 @@ namespace Plugin {
             ProcessWatcher& _parent;
         };
 
-        // Receives ResourceMonitor kill events; logs them inside ProcessWatcher.
-        class ResourceMonitorSink : public Exchange::IResourceMonitor::IProcessKilledNotification {
+        // Receives ResourceMonitor events; logs them inside ProcessWatcher.
+        class ResourceMonitorSink : public Exchange::IResourceMonitor::IProcessKilledNotification,
+                                    public Exchange::IResourceMonitor::IInitializationNotification {
         private:
             ResourceMonitorSink() = delete;
             ResourceMonitorSink(const ResourceMonitorSink&) = delete;
@@ -100,8 +101,14 @@ namespace Plugin {
                         processName.c_str(), pid, exitCode);
             }
 
+            void OnInitialized() override
+            {
+                LOGINFO("Received message from ResourceMonitor that it has been initialized.");
+            }
+
             BEGIN_INTERFACE_MAP(ResourceMonitorSink)
             INTERFACE_ENTRY(Exchange::IResourceMonitor::IProcessKilledNotification)
+            INTERFACE_ENTRY(Exchange::IResourceMonitor::IInitializationNotification)
             END_INTERFACE_MAP
         };
 
