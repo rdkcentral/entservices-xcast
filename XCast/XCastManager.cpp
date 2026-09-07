@@ -31,7 +31,7 @@ using namespace WPEFramework;
 
 #define COMMON_DEVICE_PROPERTIES_FILE   "/etc/device.properties"
 
-#define LOCATE_CAST_FIRST_TIMEOUT_IN_MILLIS  2000  //5 seconds
+#define LOCATE_CAST_FIRST_TIMEOUT_IN_MILLIS  2000  //2 seconds
 #define LOCATE_CAST_SECOND_TIMEOUT_IN_MILLIS 15000  //15 seconds
 #define LOCATE_CAST_THIRD_TIMEOUT_IN_MILLIS  30000  //30 seconds
 #define LOCATE_CAST_FINAL_TIMEOUT_IN_MILLIS  60000  //60 seconds
