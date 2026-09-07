@@ -26,6 +26,12 @@
 #include "rfcapi.h"
 #include <string>
 #include <vector>
+#include <chrono>
+
+// Boot-time profiling helpers used to narrow down XCast activation latency
+#define XCAST_PROFILE_START(tag) auto tag = std::chrono::steady_clock::now()
+#define XCAST_PROFILE_MS(tag) ((long long)std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - (tag)).count())
+#define XCAST_PROFILE_RESET(tag) tag = std::chrono::steady_clock::now()
 
 #define SERVER_DETAILS "127.0.0.1:9998"
 #define THUNDER_RPC_TIMEOUT 5000
@@ -34,7 +40,7 @@
 #define API_VERSION_NUMBER_MINOR 0
 #define API_VERSION_NUMBER_PATCH 9
 
-#define LOCATE_CAST_FIRST_TIMEOUT_IN_MILLIS  5000  //5 seconds
+#define LOCATE_CAST_FIRST_TIMEOUT_IN_MILLIS  2000  // 2 seconds
 #define LOCATE_CAST_SECOND_TIMEOUT_IN_MILLIS 10000  //10 seconds
 
 #define DIAL_MAX_ADDITIONALURL (1024)
@@ -150,28 +156,30 @@ namespace WPEFramework
 
         uint32_t XCastImplementation::Initialize(bool networkStandbyMode)
         {
+            XCAST_PROFILE_START(profTotal);
+            XCAST_PROFILE_START(profStep);
             LOGINFO("Entering..!!!");
             if(nullptr == m_xcast_manager)
             {
                 m_networkStandbyMode = networkStandbyMode;
-                LOGINFO("PROFILE: Initialize: XCastManager::getInstance start");
                 m_xcast_manager  = XCastManager::getInstance();
-                LOGINFO("PROFILE: Initialize: XCastManager::getInstance done");
+                LOGINFO("PROFILE: Initialize: XCastManager::getInstance took [%lld] ms", XCAST_PROFILE_MS(profStep));
                 if(nullptr != m_xcast_manager)
                 {
                     m_xcast_manager->setService(this);
-                    LOGINFO("PROFILE: Initialize: connectToGDialService start");
-                    if( false == connectToGDialService())
+                    XCAST_PROFILE_RESET(profStep);
+                    bool connected = connectToGDialService();
+                    LOGINFO("PROFILE: Initialize: connectToGDialService took [%lld] ms status[%u]", XCAST_PROFILE_MS(profStep), connected);
+                    if( false == connected)
                     {
-                        LOGINFO("PROFILE: Initialize: connectToGDialService failed, starting locate cast timer");
                         startTimer(LOCATE_CAST_FIRST_TIMEOUT_IN_MILLIS);
                     }
-                    LOGINFO("PROFILE: Initialize: connectToGDialService done");
                 }
                 else {
                     LOGERR("Failed to get XCastManager instance");
                 }
             }
+            LOGINFO("PROFILE: Initialize: total elapsed [%lld] ms", XCAST_PROFILE_MS(profTotal));
             LOGINFO("Exiting ..!!!");
             return Core::ERROR_NONE;
         }
@@ -226,14 +234,14 @@ namespace WPEFramework
         {
             if (nullptr == _systemServicesPlugin)
             {
-                LOGINFO("PROFILE: InitializeSystemServices: QueryInterfaceByCallsign[org.rdk.System] start");
+                XCAST_PROFILE_START(profStep);
                 _systemServicesPlugin = service->QueryInterfaceByCallsign<WPEFramework::Exchange::ISystemServices>("org.rdk.System");
-                LOGINFO("PROFILE: InitializeSystemServices: QueryInterfaceByCallsign[org.rdk.System] done");
+                LOGINFO("PROFILE: InitializeSystemServices: QueryInterfaceByCallsign[org.rdk.System] took [%lld] ms", XCAST_PROFILE_MS(profStep));
                 if (_systemServicesPlugin != nullptr)
                 {
-                    LOGINFO("PROFILE: InitializeSystemServices: registerSystemEventHandlers start");
+                    XCAST_PROFILE_RESET(profStep);
                     registerSystemEventHandlers();
-                    LOGINFO("PROFILE: InitializeSystemServices: registerSystemEventHandlers done");
+                    LOGINFO("PROFILE: InitializeSystemServices: registerSystemEventHandlers took [%lld] ms", XCAST_PROFILE_MS(profStep));
                 }
                 else
                 {
@@ -253,9 +261,9 @@ namespace WPEFramework
                 return Core::ERROR_GENERAL;
             }
 
-            LOGINFO("PROFILE: updateSystemFriendlyName: GetFriendlyName start");
+            XCAST_PROFILE_START(profStep);
             auto ret = _systemServicesPlugin->GetFriendlyName(friendlyName, success);
-            LOGINFO("PROFILE: updateSystemFriendlyName: GetFriendlyName done, ret[%u]", ret);
+            LOGINFO("PROFILE: updateSystemFriendlyName: GetFriendlyName took [%lld] ms", XCAST_PROFILE_MS(profStep));
 
             if (Core::ERROR_NONE == ret)
             {
@@ -307,27 +315,29 @@ namespace WPEFramework
             uint32_t result = Core::ERROR_NONE;
             if (( nullptr == _service ) && (service))
             {
+                XCAST_PROFILE_START(profTotal);
+                XCAST_PROFILE_START(profStep);
                 LOGINFO("Call initialise()");
                 _service = service;
                 _service->AddRef();
-                LOGINFO("PROFILE: Configure: InitializePowerManager start");
                 InitializePowerManager(service);
-                LOGINFO("PROFILE: Configure: InitializePowerManager done");
-                LOGINFO("PROFILE: Configure: InitializeNetworkManager start");
-                InitializeNetworkManager(service);
-                LOGINFO("PROFILE: Configure: InitializeNetworkManager done");
-                LOGINFO("PROFILE: Configure: Initialize start");
+                LOGINFO("PROFILE: Configure: InitializePowerManager took [%lld] ms", XCAST_PROFILE_MS(profStep));
+                XCAST_PROFILE_RESET(profStep);
+                // InitializeNetworkManager(service);
+                // LOGINFO("PROFILE: Configure: InitializeNetworkManager took [%lld] ms", XCAST_PROFILE_MS(profStep));
+                // XCAST_PROFILE_RESET(profStep);
                 Initialize(m_networkStandbyMode);
-                LOGINFO("PROFILE: Configure: Initialize done");
-                LOGINFO("PROFILE: Configure: InitializeSystemServices start");
+                LOGINFO("PROFILE: Configure: Initialize took [%lld] ms", XCAST_PROFILE_MS(profStep));
+                XCAST_PROFILE_RESET(profStep);
                 InitializeSystemServices(service);
-                LOGINFO("PROFILE: Configure: InitializeSystemServices done");
-                LOGINFO("PROFILE: Configure: updateSystemFriendlyName start");
+                LOGINFO("PROFILE: Configure: InitializeSystemServices took [%lld] ms", XCAST_PROFILE_MS(profStep));
+                XCAST_PROFILE_RESET(profStep);
                 if (Core::ERROR_NONE == updateSystemFriendlyName())
                 {
                     LOGINFO("updateSystemFriendlyName successfully [%s]",m_friendlyName.c_str());
                 }
-                LOGINFO("PROFILE: Configure: updateSystemFriendlyName done");
+                LOGINFO("PROFILE: Configure: updateSystemFriendlyName took [%lld] ms", XCAST_PROFILE_MS(profStep));
+                LOGINFO("PROFILE: Configure: total elapsed [%lld] ms", XCAST_PROFILE_MS(profTotal));
             }
             else if ((_service) && ( nullptr == service ))
             {
@@ -346,20 +356,20 @@ namespace WPEFramework
 
         void XCastImplementation::InitializePowerManager(PluginHost::IShell* service)
         {
+            XCAST_PROFILE_START(profStep);
             LOGINFO("Entering ...");
-            LOGINFO("PROFILE: InitializePowerManager: createInterface start");
             _powerManagerPlugin = PowerManagerInterfaceBuilder(_T("org.rdk.PowerManager"))
                 .withIShell(service)
                 .withRetryIntervalMS(200)
                 .withRetryCount(25)
                 .createInterface();
-            LOGINFO("PROFILE: InitializePowerManager: createInterface done");
+            LOGINFO("PROFILE: InitializePowerManager: createInterface took [%lld] ms", XCAST_PROFILE_MS(profStep));
 
             if (_powerManagerPlugin) {
                 LOGINFO("PowerManagerInterfaceBuilder created successfully");
-                LOGINFO("PROFILE: InitializePowerManager: checkPowerAndNetworkStandbyStates start");
+                XCAST_PROFILE_RESET(profStep);
                 checkPowerAndNetworkStandbyStates();
-                LOGINFO("PROFILE: InitializePowerManager: checkPowerAndNetworkStandbyStates done");
+                LOGINFO("PROFILE: InitializePowerManager: checkPowerAndNetworkStandbyStates took [%lld] ms", XCAST_PROFILE_MS(profStep));
             }
             else {
                 LOGERR("Failed to get PowerManager instance");
@@ -371,14 +381,14 @@ namespace WPEFramework
         {
             if (nullptr == _networkManagerPlugin)
             {
-                LOGINFO("PROFILE: InitializeNetworkManager: QueryInterfaceByCallsign[org.rdk.NetworkManager] start");
+                XCAST_PROFILE_START(profStep);
                 _networkManagerPlugin = service->QueryInterfaceByCallsign<WPEFramework::Exchange::INetworkManager>("org.rdk.NetworkManager");
-                LOGINFO("PROFILE: InitializeNetworkManager: QueryInterfaceByCallsign[org.rdk.NetworkManager] done");
+                LOGINFO("PROFILE: InitializeNetworkManager: QueryInterfaceByCallsign[org.rdk.NetworkManager] took [%lld] ms", XCAST_PROFILE_MS(profStep));
                 if (_networkManagerPlugin != nullptr)
                 {
-                    LOGINFO("PROFILE: InitializeNetworkManager: registerNetworkEventHandlers start");
+                    XCAST_PROFILE_RESET(profStep);
                     registerNetworkEventHandlers();
-                    LOGINFO("PROFILE: InitializeNetworkManager: registerNetworkEventHandlers done");
+                    LOGINFO("PROFILE: InitializeNetworkManager: registerNetworkEventHandlers took [%lld] ms", XCAST_PROFILE_MS(profStep));
                 }
                 else
                 {
@@ -472,18 +482,18 @@ namespace WPEFramework
 
             ASSERT (_powerManagerPlugin);
             if (_powerManagerPlugin){
-                LOGINFO("PROFILE: checkPowerAndNetworkStandbyStates: GetPowerState start");
+                XCAST_PROFILE_START(profStep);
                 retStatus = _powerManagerPlugin->GetPowerState(pwrStateCur, pwrStatePrev);
-                LOGINFO("PROFILE: checkPowerAndNetworkStandbyStates: GetPowerState done, ret[%u]", retStatus);
+                LOGINFO("PROFILE: checkPowerAndNetworkStandbyStates: GetPowerState took [%lld] ms", XCAST_PROFILE_MS(profStep));
                 if (Core::ERROR_NONE == retStatus)
                 {
                     m_powerState = pwrStateCur;
                     LOGINFO("m_powerState:%d", m_powerState);
                 }
 
-                LOGINFO("PROFILE: checkPowerAndNetworkStandbyStates: GetNetworkStandbyMode start");
+                XCAST_PROFILE_RESET(profStep);
                 retStatus = _powerManagerPlugin->GetNetworkStandbyMode(nwStandby);
-                LOGINFO("PROFILE: checkPowerAndNetworkStandbyStates: GetNetworkStandbyMode done, ret[%u]", retStatus);
+                LOGINFO("PROFILE: checkPowerAndNetworkStandbyStates: GetNetworkStandbyMode took [%lld] ms", XCAST_PROFILE_MS(profStep));
                 if (Core::ERROR_NONE == retStatus)
                 {
                     m_networkStandbyMode = nwStandby;
@@ -597,6 +607,8 @@ namespace WPEFramework
 
         bool XCastImplementation::connectToGDialService(void)
         {
+            XCAST_PROFILE_START(profTotal);
+            XCAST_PROFILE_START(profStep);
             LOGINFO("Entering ...");
             std::string interface,ipaddress;
             bool status = false;
@@ -606,20 +618,20 @@ namespace WPEFramework
                 return false;
             }
 
-            LOGINFO("PROFILE: connectToGDialService: getDefaultNameAndIPAddress start");
             getDefaultNameAndIPAddress(interface,ipaddress);
-            LOGINFO("PROFILE: connectToGDialService: getDefaultNameAndIPAddress done");
+            LOGINFO("PROFILE: connectToGDialService: getDefaultNameAndIPAddress took [%lld] ms", XCAST_PROFILE_MS(profStep));
             if (!interface.empty())
             {
-                LOGINFO("PROFILE: connectToGDialService: XCastManager::initialize start");
+                XCAST_PROFILE_RESET(profStep);
                 status = m_xcast_manager->initialize(_service, interface, m_networkStandbyMode);
-                LOGINFO("PROFILE: connectToGDialService: XCastManager::initialize done, status[%u]", status);
+                LOGINFO("PROFILE: connectToGDialService: XCastManager::initialize took [%lld] ms", XCAST_PROFILE_MS(profStep));
                 if( true == status)
                 {
                     m_activeInterfaceName = getInterfaceNameToType(interface);
                 }
             }
             LOGINFO("GDialService[%u]IF[%s]IP[%s]",status,interface.c_str(),ipaddress.c_str());
+            LOGINFO("PROFILE: connectToGDialService: total elapsed [%lld] ms", XCAST_PROFILE_MS(profTotal));
             LOGINFO("Exiting ...");
             return status;
         }
@@ -635,12 +647,13 @@ namespace WPEFramework
 
         bool XCastImplementation::getDefaultNameAndIPAddress(std::string& interface, std::string& ipaddress)
         {
+            XCAST_PROFILE_START(profTotal);
+            XCAST_PROFILE_START(profStep);
             LOGINFO("Entering ...");
             bool returnValue = false;
 
-            LOGINFO("PROFILE: getDefaultNameAndIPAddress: InitializeNetworkManager start");
             InitializeNetworkManager(_service);
-            LOGINFO("PROFILE: getDefaultNameAndIPAddress: InitializeNetworkManager done");
+            LOGINFO("PROFILE: getDefaultNameAndIPAddress: InitializeNetworkManager took [%lld] ms", XCAST_PROFILE_MS(profStep));
 
             if (nullptr == _networkManagerPlugin)
             {
@@ -649,9 +662,9 @@ namespace WPEFramework
             }
 
             uint32_t rc = Core::ERROR_GENERAL;
-            LOGINFO("PROFILE: getDefaultNameAndIPAddress: GetPrimaryInterface start");
+            XCAST_PROFILE_RESET(profStep);
             rc = _networkManagerPlugin->GetPrimaryInterface(interface);
-            LOGINFO("PROFILE: getDefaultNameAndIPAddress: GetPrimaryInterface done, rc[%u]", rc);
+            LOGINFO("PROFILE: getDefaultNameAndIPAddress: GetPrimaryInterface took [%lld] ms rc[%u]", XCAST_PROFILE_MS(profStep), rc);
 
             if (Core::ERROR_NONE != rc)
             {
@@ -662,9 +675,9 @@ namespace WPEFramework
                 Exchange::INetworkManager::IPAddress address{};
 
                 LOGINFO("Primary Interface is [%s]",interface.c_str());
-                LOGINFO("PROFILE: getDefaultNameAndIPAddress: GetIPSettings start");
+                XCAST_PROFILE_RESET(profStep);
                 rc = _networkManagerPlugin->GetIPSettings(interface, "IPv4", address);
-                LOGINFO("PROFILE: getDefaultNameAndIPAddress: GetIPSettings done, rc[%u]", rc);
+                LOGINFO("PROFILE: getDefaultNameAndIPAddress: GetIPSettings took [%lld] ms rc[%u]", XCAST_PROFILE_MS(profStep), rc);
 
                 if (Core::ERROR_NONE != rc)
                 {
@@ -700,6 +713,7 @@ namespace WPEFramework
                     }
                 }
             }
+            LOGINFO("PROFILE: getDefaultNameAndIPAddress: total elapsed [%lld] ms", XCAST_PROFILE_MS(profTotal));
             LOGINFO("Exiting ...");
             return returnValue;
         }
