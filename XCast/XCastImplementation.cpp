@@ -158,10 +158,7 @@ namespace WPEFramework
                 if(nullptr != m_xcast_manager)
                 {
                     m_xcast_manager->setService(this);
-                    if( false == connectToGDialService())
-                    {
-                        startTimer(LOCATE_CAST_FIRST_TIMEOUT_IN_MILLIS);
-                    }
+                    startTimer(LOCATE_CAST_FIRST_TIMEOUT_IN_MILLIS);
                 }
                 else {
                     LOGERR("Failed to get XCastManager instance");
@@ -300,7 +297,6 @@ namespace WPEFramework
                 _service = service;
                 _service->AddRef();
                 InitializePowerManager(service);
-                InitializeNetworkManager(service);
                 Initialize(m_networkStandbyMode);
                 InitializeSystemServices(service);
                 if (Core::ERROR_NONE == updateSystemFriendlyName())
