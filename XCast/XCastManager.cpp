@@ -175,24 +175,7 @@ bool XCastManager::initialize(WPEFramework::PluginHost::IShell* pluginService, c
         }
     }
 #endif //RFC_ENABLED
-	std::string temp_interface = "";
-	if (0 == gdial_interface_name.compare("ETHERNET"))
-    {
-        LOGINFO("VIface[%s] uses \"eth0\"",gdial_interface_name.c_str());
-        temp_interface = "eth0";
-    }
-    else if (0 == gdial_interface_name.compare("WIFI"))
-    {
-        LOGINFO("VIface[%s] uses \"wlan0\"",gdial_interface_name.c_str());
-        temp_interface = "wlan0";
-    }
-    else
-    {
-        LOGINFO("Invalid interface");
-		return false;
-	}
-
-    gdial_args.push_back("-I");
+	gdial_args.push_back("-I");
     gdial_args.push_back(std::move(temp_interface));
 
     if (m_uuid.empty())
