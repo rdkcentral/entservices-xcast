@@ -723,9 +723,19 @@ jobs:
 
               # ==========================================================
               # REMOVE ANY STALE MERGE STATE
+              #
+              # IMPORTANT: only reset when there are actual unresolved
+              # (unmerged) index entries left over from a failed apply on
+              # a PREVIOUS file. A blind `git reset --merge` here resets
+              # the index/working tree to HEAD, which silently wipes out
+              # already-staged clean changes from earlier files in this
+              # same loop (files are processed alphabetically, so earlier
+              # files were being lost whenever a later file's patch ran).
               # ==========================================================
 
-              git reset --merge 2>/dev/null || true
+              if [ -n "$(git ls-files -u)" ]; then
+                git reset --merge 2>/dev/null || true
+              fi
 
               # ==========================================================
               # ATTEMPT 1
@@ -812,7 +822,12 @@ jobs:
               echo "   ⚠️ Normal patch did not apply exactly."
               echo "   ▶ Attempt 2: Git 3-way reconciliation..."
 
-              git reset --merge 2>/dev/null || true
+              # Same reasoning as above: only clear unmerged state, never
+              # blindly reset to HEAD (that would erase already-staged
+              # clean changes from earlier files in this loop).
+              if [ -n "$(git ls-files -u)" ]; then
+                git reset --merge 2>/dev/null || true
+              fi
 
               set +e
 
@@ -999,7 +1014,9 @@ jobs:
 
           set +e
 
-          git cherry-pick --no-commit -m 1 "$MERGE_SHA" 2>&1
+          # -m/--mainline is only valid for merge commits; this branch only
+          # runs for normal (single-parent) commits, so it must be omitted.
+          git cherry-pick --no-commit "$MERGE_SHA" 2>&1
 
           CP_EXIT=$?
 
