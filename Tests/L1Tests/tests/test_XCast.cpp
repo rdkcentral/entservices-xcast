@@ -79,10 +79,17 @@ public:
     Core::hresult WifiMac(WPEFramework::Exchange::IDeviceInfo::WiFiMac& wiFiMac) const override { return Core::ERROR_NONE; }
     Core::hresult EstbIp(WPEFramework::Exchange::IDeviceInfo::StbIp& stbIp) const override { return Core::ERROR_NONE; }
     Core::hresult SupportedAudioPorts(WPEFramework::Exchange::IDeviceInfo::IStringIterator*& supportedAudioPorts, bool& success) const override { return Core::ERROR_NONE; }
+    Core::hresult DeviceId(WPEFramework::Exchange::IDeviceInfo::DeviceIdInfo& deviceIdInfo) const override { return Core::ERROR_NONE; }
+    Core::hresult HardwareId(WPEFramework::Exchange::IDeviceInfo::HardwareIdInfo& hardwareIdInfo) const override { return Core::ERROR_NONE; }
+    Core::hresult OsName(WPEFramework::Exchange::IDeviceInfo::DeviceOsName& deviceOsName) const override { return Core::ERROR_NONE; }
+    Core::hresult OsName(const string& osName) override { return Core::ERROR_NONE; }
+    Core::hresult OsVersion(WPEFramework::Exchange::IDeviceInfo::DeviceOsVersion& deviceOsVersion) const override { return Core::ERROR_NONE; }
+    Core::hresult OsVersion(const string& osVersion) override { return Core::ERROR_NONE; }
 
     // IUnknown interface methods - simple implementations
-    void AddRef() const override {
+    uint32_t AddRef() const override {
         // Mock implementation - do nothing in tests
+        return Core::ERROR_NONE;
     }
 
     uint32_t Release() const override {
@@ -167,6 +174,9 @@ protected:
     Core::ProxyType<Plugin::XCastImplementation> xcastImpl;
     NiceMock<COMLinkMock> comLinkMock;
     Core::ProxyType<WorkerPoolImplementation> workerPool;
+    // Signalled from the mocked ActivationChanged call once the locate-cast timer's deferred GDial connect completes
+    std::promise<void> _gdialConnectedPromise;
+    std::atomic<bool> _gdialConnectSignaled{false};
     NiceMock<FactoriesImplementation> factoriesImplementation;
 
     Core::hresult createResources()
@@ -280,7 +290,28 @@ protected:
                     return Core::ERROR_NONE;
                 }));
 
+        // XCastImplementation::Initialize() now always defers the first GDial connect to the
+        // locate-cast timer instead of connecting synchronously. ActivationChanged is always
+        // invoked once that deferred connect succeeds, so use it as the readiness signal instead
+        // of polling/sleeping. Individual tests' own EXPECT_CALLs on ActivationChanged take
+        // precedence over this once they're set (gmock matches the most-recently-set expectation).
+        EXPECT_CALL(*p_gdialserviceImplMock, ActivationChanged(::testing::_, ::testing::_))
+            .Times(::testing::AnyNumber())
+            .WillRepeatedly(::testing::Invoke(
+                [&](std::string, std::string) {
+                    if (!_gdialConnectSignaled.exchange(true))
+                    {
+                        _gdialConnectedPromise.set_value();
+                    }
+                    return GDIAL_SERVICE_ERROR_NONE;
+                }));
+
         EXPECT_EQ(string(""), plugin->Initialize(mServiceMock));
+
+        // ASSERT_* cannot be used here since createResources() returns non-void
+        EXPECT_EQ(std::future_status::ready, _gdialConnectedPromise.get_future().wait_for(std::chrono::seconds(10)))
+            << "Timed out waiting for the deferred GDial connect (locate-cast timer) to complete";
+
         TEST_LOG("createResources - All done!");
         status = Core::ERROR_NONE;
 
@@ -677,13 +708,14 @@ TEST_F(XCastTest, onApplicationLaunchRequest)
             [&](const uint32_t, const Core::ProxyType<Core::JSON::IElement>& json) {
                 string text;
                 EXPECT_TRUE(json->ToString(text));
-                EXPECT_EQ(text, string(_T("{\"jsonrpc\":\"2.0\",\"method\":\"client.events.onApplicationLaunchRequest\",\"params\":{\"applicationName\":\"Youtube\",\"strPayLoad\":\"youtube_payload\",\"strQuery\":\"source_type=12\",\"strAddDataUrl\":\"http:\\/\\/youtube.com\"}}")));
+                EXPECT_EQ(text, string(_T("{\"jsonrpc\":\"2.0\",\"method\":\"client.events.onApplicationLaunchRequestWithParam\",\"params\":{\"applicationName\":\"Youtube\",\"strPayLoad\":\"youtube_payload\",\"strQuery\":\"source_type=12\",\"strAddDataUrl\":\"http:\\/\\/youtube.com\"}}")));
                 TEST_LOG("LaunchRequest with param event received");
                 onLaunchRequestParam.SetEvent();
                 return Core::ERROR_NONE;
             }));
 
     EVENT_SUBSCRIBE(0, _T("onApplicationLaunchRequest"), _T("client.events"), message);
+    EVENT_SUBSCRIBE(0, _T("onApplicationLaunchRequestWithParam"), _T("client.events"), message);
 
     GDialNotifier* gdialNotifier = gdialService::getObserverHandle();
     ASSERT_NE(gdialNotifier, nullptr);
@@ -693,6 +725,7 @@ TEST_F(XCastTest, onApplicationLaunchRequest)
     gdialNotifier->onApplicationLaunchRequestWithLaunchParam("Youtube", "youtube_payload", "source_type=12", "http://youtube.com");
     EXPECT_EQ(Core::ERROR_NONE, onLaunchRequestParam.Lock(5000));
 
+    EVENT_UNSUBSCRIBE(0, _T("onApplicationLaunchRequestWithParam"), _T("client.events"), message);
     EVENT_UNSUBSCRIBE(0, _T("onApplicationLaunchRequest"), _T("client.events"), message);
 
     if (Core::ERROR_NONE == status)
