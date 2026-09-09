@@ -104,9 +104,9 @@ jobs:
           # ── Validate: Simplified rules (none | develop | X.Y.Z(.W)) ────────
           # Accept 'develop' (any case) and numeric versions. Keep rules simple
           # to avoid accidental removal of existing functionality.
-          if echo "$VERSION" | grep -qiE '^develop$'; then
-            SUPPORT_BRANCH="develop"
-            echo "✅ Target mapped: backport_to 'develop' → branch: $SUPPORT_BRANCH"
+          if echo "$VERSION" | grep -qiE '^(dummy_)?develop$'; then
+            SUPPORT_BRANCH=$(echo "$VERSION" | tr '[:upper:]' '[:lower:]')
+            echo "✅ Target mapped: backport_to '$SUPPORT_BRANCH' → branch: $SUPPORT_BRANCH"
           elif echo "$VERSION" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+(\.[0-9]+)?$'; then
             # Map 3-part versions to support/X.Y.Z.0 for compatibility
             IFS='.' read -ra PARTS <<< "$VERSION"

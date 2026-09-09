@@ -149,10 +149,10 @@ jobs:
           # ────────────────────────────────────────────────────────────────────
           echo "▶ Rule 4: Validating version format..."
 
-          # If explicitly 'develop', accept and map to develop
-          if echo "$VERSION" | grep -qiE '^develop$'; then
-            SUPPORT_BRANCH="develop"
-            echo "  ✅ 'develop' accepted → branch: develop"
+          # If explicitly 'develop' or 'dummy_develop', accept and map to that branch
+          if echo "$VERSION" | grep -qiE '^(dummy_)?develop$'; then
+            SUPPORT_BRANCH=$(echo "$VERSION" | tr '[:upper:]' '[:lower:]')
+            echo "  ✅ '$SUPPORT_BRANCH' accepted → branch: $SUPPORT_BRANCH"
           else
             # Accept numeric semantic versions: X.Y.Z or X.Y.Z.W
             if ! echo "$VERSION" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+(\.[0-9]+)?$'; then
