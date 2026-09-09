@@ -175,8 +175,8 @@ bool XCastManager::initialize(WPEFramework::PluginHost::IShell* pluginService, c
         }
     }
 #endif //RFC_ENABLED
-	gdial_args.push_back("-I");
-    gdial_args.push_back(std::move(gdial_interface_name));
+    gdial_args.push_back("-I");
+    gdial_args.push_back(gdial_interface_name);
 
     if (m_uuid.empty())
     {
