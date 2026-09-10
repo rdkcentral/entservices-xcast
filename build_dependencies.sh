@@ -191,6 +191,11 @@ touch rdk_logger_milestone.h
 touch gdialservice.h
 touch gdialservicecommon.h
 echo "files created successfully"
+
+# Create mock NetworkManager proxy library for Coverity build
+mkdir -p $GITHUB_WORKSPACE/install/usr/lib/wpeframework/proxystubs
+touch $GITHUB_WORKSPACE/install/usr/lib/wpeframework/proxystubs/libWPEFrameworkNetworkManagerProxy.so
+echo "mock library created successfully"
 echo "======================================================================================"
 
 cd ../../
