@@ -193,8 +193,8 @@ touch gdialservicecommon.h
 echo "files created successfully"
 
 # Create mock NetworkManager proxy library for Coverity build
-mkdir -p $GITHUB_WORKSPACE/install/usr/lib/wpeframework/proxystubs
-touch $GITHUB_WORKSPACE/install/usr/lib/wpeframework/proxystubs/libWPEFrameworkNetworkManagerProxy.so
+mkdir -p /usr/lib/wpeframework/proxystubs
+touch /usr/lib/wpeframework/proxystubs/libWPEFrameworkNetworkManagerProxy.so
 echo "mock library created successfully"
 echo "======================================================================================"
 
