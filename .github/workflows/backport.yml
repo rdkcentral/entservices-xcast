@@ -1,4 +1,4 @@
-name: PR - Backport to Release Branch
+name: backport PR
 
 # Runs when a PR is MERGED into dummy_develop / support/** / release/**
 # Reads backport_to from PR description:
@@ -311,19 +311,21 @@ jobs:
           set -e
 
           # --------------------------------------------------------------
-          # Ignore conflicts under .github/
+          # Exclude ALL .github/ changes, whether they conflicted or were
+          # applied cleanly. Only .github/ files were being excluded when
+          # they showed up as conflicts (git ls-files -u); cleanly applied
+          # .github/ changes were never filtered out and still got committed.
           # --------------------------------------------------------------
-          GITHUB_CONFLICTS=$(
-            git ls-files -u |
-            cut -f2 |
+          GITHUB_CHANGED=$(
+            { git diff --cached --name-only; git ls-files -u | cut -f2; } |
             sort -u |
             grep '^\.github/' || true
           )
 
-          if [ -n "$GITHUB_CONFLICTS" ]; then
+          if [ -n "$GITHUB_CHANGED" ]; then
             echo ""
-            echo "Excluding .github/ conflicts:"
-            echo "$GITHUB_CONFLICTS"
+            echo "Excluding .github/ changes:"
+            echo "$GITHUB_CHANGED"
 
             while IFS= read -r file; do
               [ -n "$file" ] || continue
@@ -334,7 +336,7 @@ jobs:
                 git rm --cached --force "$file" 2>/dev/null || true
                 rm -f "$file" 2>/dev/null || true
               fi
-            done <<< "$GITHUB_CONFLICTS"
+            done <<< "$GITHUB_CHANGED"
           fi
 
           # --------------------------------------------------------------
