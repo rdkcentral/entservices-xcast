@@ -333,7 +333,7 @@ namespace WPEFramework
             void onXcastUpdatePowerStateRequest(string powerState);
             uint32_t SetNetworkStandbyMode(bool networkStandbyMode);
             bool setPowerState(const std::string& powerState);
-            int updateDynamicAppCache(Exchange::IXCast::IApplicationInfoIterator* const appInfoList);
+            float updateDynamicAppCache(Exchange::IXCast::IApplicationInfoIterator* const appInfoList);
             
         public:
             static XCastImplementation* _instance;
