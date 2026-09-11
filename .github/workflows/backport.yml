@@ -314,6 +314,11 @@ jobs:
 
           set -e
 
+          # Snapshot conflicts as they stood right after the cherry-pick,
+          # before any cleanup below resolves/removes them. Needed to tell
+          # a genuine failure apart from one that gets fully cleaned up.
+          HAD_CONFLICTS=$(git ls-files -u | cut -f2 | sort -u || true)
+
           # --------------------------------------------------------------
           # Exclude ALL .github/ changes, whether they conflicted or were
           # applied cleanly. Only .github/ files were being excluded when
@@ -369,9 +374,10 @@ jobs:
             exit 0
           fi
 
-          # If Git failed but there are no unresolved file conflicts,
-          # report the actual failure instead of hiding it.
-          if [ "$CHERRY_PICK_EXIT" -ne 0 ]; then
+          # If Git failed for a reason other than conflicts we already
+          # detected and handled above (e.g. .github/-only conflicts that
+          # got excluded), report the actual failure instead of hiding it.
+          if [ "$CHERRY_PICK_EXIT" -ne 0 ] && [ -z "$HAD_CONFLICTS" ]; then
             echo ""
             echo "❌ Cherry-pick failed."
             echo "Git returned exit code: $CHERRY_PICK_EXIT"
