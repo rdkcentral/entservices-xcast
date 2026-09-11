@@ -193,10 +193,9 @@ touch gdialservicecommon.h
 echo "files created successfully"
 
 # Create mock libraries for Coverity build
-mkdir -p /usr/lib/wpeframework/proxystubs
-touch /usr/lib/wpeframework/proxystubs/libWPEFrameworkNetworkManagerProxy.so
-mkdir -p /usr/lib
-touch /usr/lib/libgdial-server.so
+install -d /usr/lib/wpeframework/proxystubs /usr/lib
+cc -shared -x c -o /usr/lib/wpeframework/proxystubs/libWPEFrameworkNetworkManagerProxy.so /dev/null
+cc -shared -x c -o /usr/lib/libgdial-server.so /dev/null
 echo "mock libraries created successfully"
 echo "======================================================================================"
 
