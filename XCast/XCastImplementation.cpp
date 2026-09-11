@@ -158,10 +158,7 @@ namespace WPEFramework
                 if(nullptr != m_xcast_manager)
                 {
                     m_xcast_manager->setService(this);
-                    if( false == connectToGDialService())
-                    {
-                        startTimer(LOCATE_CAST_FIRST_TIMEOUT_IN_MILLIS);
-                    }
+                    startTimer(LOCATE_CAST_FIRST_TIMEOUT_IN_MILLIS);
                 }
                 else {
                     LOGERR("Failed to get XCastManager instance");
@@ -300,7 +297,6 @@ namespace WPEFramework
                 _service = service;
                 _service->AddRef();
                 InitializePowerManager(service);
-                InitializeNetworkManager(service);
                 Initialize(m_networkStandbyMode);
                 InitializeSystemServices(service);
                 if (Core::ERROR_NONE == updateSystemFriendlyName())
@@ -1138,7 +1134,7 @@ namespace WPEFramework
             return ret;
         }
 
-        void XCastImplementation::updateDynamicAppCache(Exchange::IXCast::IApplicationInfoIterator* const appInfoList)
+        float XCastImplementation::updateDynamicAppCache(Exchange::IXCast::IApplicationInfoIterator* const appInfoList)
         {
             std::vector <DynamicAppConfig*> appConfigList;
             if (appInfoList != nullptr)
@@ -1190,6 +1186,7 @@ namespace WPEFramework
                         return;
                     }
                 }
+                return 0.0f;
             }
 
             dumpDynamicAppCacheList(string("appConfigList"), appConfigList);
@@ -1221,7 +1218,7 @@ namespace WPEFramework
             LOGINFO("Entering ...");
             enableCastService(m_friendlyName,false);
             m_isDynamicRegistrationsRequired = true;
-            updateDynamicAppCache(appInfoList);
+            float result = updateDynamicAppCache(appInfoList);
             std::vector<DynamicAppConfig*> appConfigList;
             {
                 lock_guard<mutex> lck(m_appConfigMutex);
@@ -1327,6 +1324,7 @@ namespace WPEFramework
                 else
                 {
                     LOGINFO("changing power state [%d] -> [%d] success",cur_powerState,new_powerState);
+                    LOGINFO("Set power state log addedd");
                 }
             }
             return ret;
