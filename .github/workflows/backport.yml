@@ -21,6 +21,10 @@ permissions:
   contents: write
   pull-requests: write
 
+concurrency:
+  group: backport-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
 jobs:
   backport:
     if: github.event.pull_request.merged == true
@@ -552,7 +556,7 @@ jobs:
             exit 1
           fi
 
-          git push origin "$FEATURE_BRANCH" --force-with-lease
+          git push origin "$FEATURE_BRANCH" --force
 
 
           # ── 6. Create Pull Request ───────────────────────────────────────────────
