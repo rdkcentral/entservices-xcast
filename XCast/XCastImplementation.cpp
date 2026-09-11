@@ -1286,7 +1286,7 @@ namespace WPEFramework
             return (returnStatus)? Core::ERROR_NONE : Core::ERROR_GENERAL;
         }
 
-        bool XCastImplementation::setPowerState(const string &powerState)
+        void XCastImplementation::setPowerState(const string &powerState)
         {
             PowerState cur_powerState = m_powerState,
             new_powerState = WPEFramework::Exchange::IPowerManager::POWER_STATE_OFF;
@@ -1325,7 +1325,6 @@ namespace WPEFramework
                     LOGINFO("changing power state [%d] -> [%d] success",cur_powerState,new_powerState);
                 }
             }
-            return ret;
         }
     } // namespace Plugin
 } // namespace WPEFramework
