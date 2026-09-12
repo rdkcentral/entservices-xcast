@@ -22,7 +22,11 @@ permissions:
   pull-requests: write
 
 concurrency:
-  group: backport-${{ github.event.pull_request.number }}
+  # Keyed globally (not per PR number) because the branch-name sequence
+  # (feature/<TICKET>, _1, _2, ...) is shared across every PR for the same
+  # ticket, regardless of PR number, so overlapping runs for different PRs
+  # can still race to create/push the same candidate branch name.
+  group: backport-serialize
   cancel-in-progress: false
 
 jobs:
