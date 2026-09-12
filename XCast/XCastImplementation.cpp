@@ -1319,7 +1319,7 @@ namespace WPEFramework
                 {
                     ret = false;
                     LOGINFO("Failed to change power state [%d] -> [%d] ret[%x]",cur_powerState,new_powerState,ret);
-                    LOGINFO("Set power state log added 2");
+                    LOGINFO("Log added ");
                 }
                 else
                 {
