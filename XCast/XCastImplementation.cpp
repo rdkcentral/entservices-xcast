@@ -1134,7 +1134,7 @@ namespace WPEFramework
             return ret;
         }
 
-        float XCastImplementation::updateDynamicAppCache(Exchange::IXCast::IApplicationInfoIterator* const appInfoList)
+        void XCastImplementation::updateDynamicAppCache(Exchange::IXCast::IApplicationInfoIterator* const appInfoList)
         {
             std::vector <DynamicAppConfig*> appConfigList;
             if (appInfoList != nullptr)
@@ -1186,7 +1186,6 @@ namespace WPEFramework
                         return;
                     }
                 }
-                return 0.0f;
             }
 
             dumpDynamicAppCacheList(string("appConfigList"), appConfigList);
@@ -1218,7 +1217,7 @@ namespace WPEFramework
             LOGINFO("Entering ...");
             enableCastService(m_friendlyName,false);
             m_isDynamicRegistrationsRequired = true;
-            float result = updateDynamicAppCache(appInfoList);
+            updateDynamicAppCache(appInfoList);
             std::vector<DynamicAppConfig*> appConfigList;
             {
                 lock_guard<mutex> lck(m_appConfigMutex);
