@@ -1324,7 +1324,6 @@ namespace WPEFramework
                 else
                 {
                     LOGINFO("changing power state [%d] -> [%d] success",cur_powerState,new_powerState);
-                    LOGINFO("Set power state log addedd - conflicts test here");
                 }
             }
             return ret;
