@@ -265,9 +265,7 @@ jobs:
           echo "Using feature branch: $FEATURE_BRANCH"
 
           echo "Creating new feature branch '$FEATURE_BRANCH' from '$SUPPORT_BRANCH'..."
-          #git checkout -b "$FEATURE_BRANCH" "origin/$SUPPORT_BRANCH"
-          FEATURE_BRANCH=feature/my-test6 
-          git checkout $FEATURE_BRANCH
+          git checkout -b "$FEATURE_BRANCH" "origin/$SUPPORT_BRANCH"
 
           # Verify checkout succeeded
           CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
