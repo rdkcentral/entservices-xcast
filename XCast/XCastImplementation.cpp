@@ -1324,7 +1324,7 @@ namespace WPEFramework
                 else
                 {
                     LOGINFO("changing power state [%d] -> [%d] success",cur_powerState,new_powerState);
-                    LOGINFO("Third log has been added");
+                    LOGINFO("Log Four has been added");
                 }
             }
             return ret;
