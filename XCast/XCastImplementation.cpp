@@ -554,6 +554,9 @@ namespace WPEFramework
                 case Exchange::IAppManager::APP_STATE_ACTIVE:
                     appstate = "running";
                     break;
+                case Exchange::IAppManager::APP_STATE_ACTIVE:
+                    appstate = "visible";
+                    break;
                 case Exchange::IAppManager::APP_STATE_SUSPENDED:
                 case Exchange::IAppManager::APP_STATE_HIBERNATED:
                     appstate = "suspended";
