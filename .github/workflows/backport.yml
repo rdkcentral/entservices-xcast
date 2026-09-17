@@ -2,8 +2,11 @@ name: backport PR
 
 # Runs when a PR is MERGED into dummy_develop / support/** / release/**
 # Reads backport_to from PR description:
-#   backport_to: none     → skip
-#   backport_to: 8.3.4.0  → backport to support/8.3.4.0
+#   backport_to omitted                 → no backport needed (not an error)
+#   backport_to: none                   → no backport needed
+#   backport_to: 8.3.4.0                → backport to support/8.3.4.0
+#   backport_to: dummy_develop,8.3.4.0  → backport to BOTH targets
+# If 'backport_to:' appears more than once, the LAST occurrence wins.
 #
 # If cherry-pick has conflicts → resolves them inline (diff3 / take incoming)
 # No second workflow needed. No workflow_run dependency. Self-contained.
@@ -21,34 +24,26 @@ permissions:
   contents: write
   pull-requests: write
 
-concurrency:
-  # Keyed globally (not per PR number) because the branch-name sequence
-  # (feature/<TICKET>, _1, _2, ...) is shared across every PR for the same
-  # ticket, regardless of PR number, so overlapping runs for different PRs
-  # can still race to create/push the same candidate branch name.
-  group: backport-serialize
-  cancel-in-progress: false
-
 jobs:
-  backport:
+  # ── Parse the PR once: ticket + list of target branches ──────────────────
+  parse:
     if: github.event.pull_request.merged == true
     runs-on: ubuntu-latest
-
+    outputs:
+      skip:       ${{ steps.info.outputs.skip }}
+      ticket:     ${{ steps.info.outputs.ticket }}
+      branches:   ${{ steps.info.outputs.branches }}
+      merge_sha:  ${{ steps.info.outputs.merge_sha }}
+      pr_title:   ${{ steps.info.outputs.pr_title }}
+      pr_url:     ${{ steps.info.outputs.pr_url }}
     steps:
-
-      # ── 0. Checkout ──────────────────────────────────────────────────────────
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
           token: ${{ secrets.RDKCM_RDKE }}
 
-      - name: Configure Git
-        run: |
-          git config user.name  "GitHub Actions [Backport]"
-          git config user.email "github-actions@users.noreply.github.com"
-
-      # ── 1. Extract and validate backport_to + ticket ────────────────────────
+      # ── Extract and validate backport_to + ticket ────────────────────────
       - name: Extract PR info and validate backport_to
         id: info
         env:
@@ -73,22 +68,28 @@ jobs:
             exit 1
           fi
           
-          # ── Extract backport_to (same logic as pr-validate-release.yml) ────────
-          # Handle case insensitive, flexible colon spacing, trailing comments, multi-line YAML
-          RAW_LINE=$(echo "$PR_BODY" | grep -iE '^\s*backport_to\s*:' | head -1 || true)
-          
+          # ── backport_to omitted entirely → nothing to do, not an error ────
+          RAW_LINE=$(echo "$PR_BODY" | grep -iE '^\s*backport_to\s*:' | tail -1 || true)
+
           if [ -z "$RAW_LINE" ]; then
-            echo "❌ 'backport_to:' field missing from PR description"
-            echo "   Add: backport_to: none  OR  backport_to: 8.3.4.0"
-            exit 1
+            echo "ℹ️  'backport_to:' not specified — no backport needed"
+            echo "skip=true"     >> "$GITHUB_OUTPUT"
+            echo "branches=[]"   >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # Multiple 'backport_to:' lines are allowed — the LAST one wins.
+          OCCURRENCE_COUNT=$(echo "$PR_BODY" | grep -ciE '^\s*backport_to\s*:' || true)
+          if [ "$OCCURRENCE_COUNT" -gt 1 ]; then
+            echo "ℹ️  Multiple 'backport_to' fields found ($OCCURRENCE_COUNT) — using the last one"
           fi
           
           # Extract value (handle value on same line or next line)
           VALUE_ON_SAME_LINE=$(echo "$RAW_LINE" | sed -E 's/^[^:]*:\s*//' | sed 's/#.*//' | xargs || true)
           
           if [ -z "$VALUE_ON_SAME_LINE" ]; then
-            # Multi-line YAML: check next non-empty line
-            LINE_NUM=$(echo "$PR_BODY" | grep -inE '^\s*backport_to\s*:' | head -1 | cut -d: -f1)
+            # Multi-line YAML: check next non-empty line after the LAST backport_to line
+            LINE_NUM=$(echo "$PR_BODY" | grep -inE '^\s*backport_to\s*:' | tail -1 | cut -d: -f1)
             VALUE_ON_SAME_LINE=$(echo "$PR_BODY" | tail -n +$((LINE_NUM + 1)) | grep -v '^[[:space:]]*$' | head -1 | sed 's/#.*//' | xargs || true)
           fi
           
@@ -96,39 +97,71 @@ jobs:
           
           echo "backport_to : '$VERSION'"
           
-          # ── Validate: Field must have value ───────────────────────────────
+          # ── Empty value after parsing → nothing to do, not an error ───────
           if [ -z "$VERSION" ]; then
-            echo "❌ backport_to field is empty"
-            exit 1
+            echo "ℹ️  backport_to field is empty — no backport needed"
+            echo "skip=true"     >> "$GITHUB_OUTPUT"
+            echo "branches=[]"   >> "$GITHUB_OUTPUT"
+            exit 0
           fi
           
           # ── Validate: Handle 'none' (no backport) ─────────────────────────
           if echo "$VERSION" | grep -qiE '^none$'; then
             echo "ℹ️  backport_to: none — no backport needed"
-            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "skip=true"     >> "$GITHUB_OUTPUT"
+            echo "branches=[]"   >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          
-          # ── Validate: Simplified rules (none | develop | X.Y.Z(.W)) ────────
-          # Accept 'develop' (any case) and numeric versions. Keep rules simple
-          # to avoid accidental removal of existing functionality.
-          if echo "$VERSION" | grep -qiE '^(dummy_)?develop$'; then
-            SUPPORT_BRANCH=$(echo "$VERSION" | tr '[:upper:]' '[:lower:]')
-            echo "✅ Target mapped: backport_to '$SUPPORT_BRANCH' → branch: $SUPPORT_BRANCH"
-          elif echo "$VERSION" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+(\.[0-9]+)?$'; then
-            # Map 3-part versions to support/X.Y.Z.0 for compatibility
-            IFS='.' read -ra PARTS <<< "$VERSION"
-            if [ "${#PARTS[@]}" -eq 3 ]; then
-              SUPPORT_BRANCH="support/${VERSION}.0"
-            else
-              SUPPORT_BRANCH="support/${VERSION}"
-            fi
-            echo "✅ Numeric version accepted → branch: $SUPPORT_BRANCH"
-          else
-            echo "❌ Invalid backport_to: '$VERSION'"
-            echo "   Allowed values: 'none', 'develop', or semantic numeric like 8.3.4 or 8.3.4.0"
-            exit 1
+
+          # ── Split comma-separated targets, e.g. "dummy_develop,8.3.4.0" ───
+          IFS=',' read -ra RAW_LIST <<< "$VERSION"
+          CLEAN_LIST=()
+          for v in "${RAW_LIST[@]}"; do
+            v_trimmed=$(echo "$v" | xargs)
+            [ -n "$v_trimmed" ] && CLEAN_LIST+=("$v_trimmed")
+          done
+
+          if [ "${#CLEAN_LIST[@]}" -eq 0 ]; then
+            echo "ℹ️  backport_to has no usable values — no backport needed"
+            echo "skip=true"     >> "$GITHUB_OUTPUT"
+            echo "branches=[]"   >> "$GITHUB_OUTPUT"
+            exit 0
           fi
+
+          # 'none' is only valid on its own, not combined with real targets
+          if [ "${#CLEAN_LIST[@]}" -gt 1 ]; then
+            for v in "${CLEAN_LIST[@]}"; do
+              if echo "$v" | grep -qiE '^none$'; then
+                echo "❌ Invalid backport_to: 'none' cannot be combined with other targets ('$VERSION')"
+                exit 1
+              fi
+            done
+          fi
+
+          # ── Validate: Simplified rules (develop | X.Y.Z(.W)) per target ───
+          SUPPORT_BRANCHES=()
+          for v in "${CLEAN_LIST[@]}"; do
+            if echo "$v" | grep -qiE '^(dummy_)?develop$'; then
+              b=$(echo "$v" | tr '[:upper:]' '[:lower:]')
+              echo "✅ Target mapped: '$v' → branch: $b"
+            elif echo "$v" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+(\.[0-9]+)?$'; then
+              # Map 3-part versions to support/X.Y.Z.0 for compatibility
+              IFS='.' read -ra PARTS <<< "$v"
+              if [ "${#PARTS[@]}" -eq 3 ]; then
+                b="support/${v}.0"
+              else
+                b="support/${v}"
+              fi
+              echo "✅ Numeric version accepted: '$v' → branch: $b"
+            else
+              echo "❌ Invalid backport_to value: '$v'"
+              echo "   Allowed values: 'none', 'develop', or semantic numeric like 8.3.4 or 8.3.4.0"
+              exit 1
+            fi
+            SUPPORT_BRANCHES+=("$b")
+          done
+
+          BRANCHES_JSON=$(printf '%s\n' "${SUPPORT_BRANCHES[@]}" | jq -R . | jq -sc .)
           
           # ── Extract and validate ticket (prefer PR title, then branch, then fallback) ─────────
           TICKET=$(echo "$PR_TITLE" | grep -oE '[A-Z]+-[0-9]+' | head -1 || true)
@@ -147,34 +180,62 @@ jobs:
             echo "   Using fallback: BACKPORT_$PR_NUMBER"
             TICKET="BACKPORT_$PR_NUMBER"
           fi
-
-          FEATURE_BRANCH="feature/${TICKET}"
           
           # ── Set outputs ────────────────────────────────────────────────────
           echo "skip=false"                       >> "$GITHUB_OUTPUT"
-          echo "version=$VERSION"                 >> "$GITHUB_OUTPUT"
           echo "ticket=$TICKET"                   >> "$GITHUB_OUTPUT"
-          echo "support_branch=$SUPPORT_BRANCH"   >> "$GITHUB_OUTPUT"
-          echo "feature_branch=$FEATURE_BRANCH"   >> "$GITHUB_OUTPUT"
+          echo "branches=$BRANCHES_JSON"          >> "$GITHUB_OUTPUT"
           echo "merge_sha=$MERGE_SHA"             >> "$GITHUB_OUTPUT"
           echo "pr_title=$PR_TITLE"               >> "$GITHUB_OUTPUT"
           echo "pr_url=$PR_URL"                   >> "$GITHUB_OUTPUT"
-          echo "pr_number=$PR_NUMBER" >> "$GITHUB_OUTPUT"
           
           echo ""
           echo "┌─ BACKPORT PLAN ────────────────────────────────────────────────┐"
           echo "│  Ticket          : $TICKET"
-          echo "│  Release version : $VERSION"
-          echo "│  Support branch  : $SUPPORT_BRANCH"
-          echo "│  Feature branch  : $FEATURE_BRANCH"
+          echo "│  Targets         : ${SUPPORT_BRANCHES[*]}"
           echo "│  Merge commit    : $MERGE_SHA"
           echo "└────────────────────────────────────────────────────────────────┘"
 
+  # ── One matrix run per target branch, fully independent and self-contained ──
+  backport:
+    needs: parse
+    if: needs.parse.outputs.skip != 'true'
+    runs-on: ubuntu-latest
+    concurrency:
+      # Keyed globally (not per PR/ticket) because the branch-name sequence
+      # (feature/<TICKET>, _1, _2, ...) is shared across every PR for the same
+      # ticket regardless of PR number or target branch, so overlapping runs
+      # can still race to create/push the same candidate branch name.
+      group: backport-serialize
+      cancel-in-progress: false
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        support_branch: ${{ fromJson(needs.parse.outputs.branches) }}
+    env:
+      SUPPORT_BRANCH: ${{ matrix.support_branch }}
+      TICKET:         ${{ needs.parse.outputs.ticket }}
+      MERGE_SHA:      ${{ needs.parse.outputs.merge_sha }}
+      PR_TITLE:       ${{ needs.parse.outputs.pr_title }}
+      PR_URL:         ${{ needs.parse.outputs.pr_url }}
+
+    steps:
+
+      # ── 0. Checkout ──────────────────────────────────────────────────────────
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.RDKCM_RDKE }}
+
+      - name: Configure Git
+        run: |
+          git config user.name  "GitHub Actions [Backport]"
+          git config user.email "github-actions@users.noreply.github.com"
+
       # ── 2. Validate support branch exists ────────────────────────────────────
       - name: Validate support branch exists
-        if: steps.info.outputs.skip != 'true'
-        env:
-          SUPPORT_BRANCH: ${{ steps.info.outputs.support_branch }}
         run: |
           set -euo pipefail
           
@@ -196,10 +257,6 @@ jobs:
       # ── 3. Create or checkout feature branch from support ────────────────────
       - name: Create or checkout feature branch
         id: setup_feature
-        if: steps.info.outputs.skip != 'true'
-        env:
-          SUPPORT_BRANCH: ${{ steps.info.outputs.support_branch }}
-          FEATURE_BRANCH: ${{ steps.info.outputs.feature_branch }}
         run: |
           set -euo pipefail
           
@@ -208,10 +265,7 @@ jobs:
             exit 1
           fi
 
-          if [ -z "$FEATURE_BRANCH" ]; then
-            echo "❌ FATAL: FEATURE_BRANCH is empty"
-            exit 1
-          fi
+          FEATURE_BRANCH="feature/${TICKET}"
 
           git fetch origin "$SUPPORT_BRANCH"
 
@@ -287,13 +341,7 @@ jobs:
 
         # ── 4a. Apply merge commit and detect conflicts ─────────────────────
       - name: "Phase 4a: Cherry-pick and detect conflicts"
-        if: steps.info.outputs.skip != 'true'
         id: cherry_pick
-        env:
-          MERGE_SHA: ${{ steps.info.outputs.merge_sha }}
-          TICKET:    ${{ steps.info.outputs.ticket }}
-          VERSION:   ${{ steps.info.outputs.version }}
-          PR_TITLE:  ${{ steps.info.outputs.pr_title }}
         run: |
           set -euo pipefail
 
@@ -407,7 +455,7 @@ jobs:
           echo "▶ Committing backport..."
 
           git commit \
-            -m "${TICKET}: Backport to support/${VERSION} — ${PR_TITLE}"
+            -m "${TICKET}: Backport to ${SUPPORT_BRANCH} — ${PR_TITLE}"
 
           echo ""
           echo "✅ Cherry-pick completed successfully."
@@ -419,14 +467,9 @@ jobs:
 
         # ── 4b. Show conflict details and manual resolution steps ───────────
       - name: "Phase 4b: Show conflict details and resolution steps"
-        if: steps.info.outputs.skip != 'true' && steps.cherry_pick.outputs.has_conflicts == 'true'
+        if: steps.cherry_pick.outputs.has_conflicts == 'true'
         env:
           FEATURE_BRANCH: ${{ steps.setup_feature.outputs.feature_branch }}
-          SUPPORT_BRANCH: ${{ steps.info.outputs.support_branch }}
-          MERGE_SHA:      ${{ steps.info.outputs.merge_sha }}
-          VERSION:        ${{ steps.info.outputs.version }}
-          TICKET:         ${{ steps.info.outputs.ticket }}
-          PR_TITLE:       ${{ steps.info.outputs.pr_title }}
         run: |
           set -euo pipefail
 
@@ -520,7 +563,7 @@ jobs:
           echo "5️⃣  COMMIT AND PUSH"
           echo ""
           echo "git add ."
-          echo "git commit -m \"${TICKET}: Backport to support/${VERSION} — ${PR_TITLE}\""
+          echo "git commit -m \"${TICKET}: Backport to ${SUPPORT_BRANCH} — ${PR_TITLE}\""
           echo "git push origin $FEATURE_BRANCH"
           echo ""
 
@@ -539,7 +582,6 @@ jobs:
       
       # ── Output consolidation for downstream steps ─────────────────────────────
       - name: Set final apply status
-        if: steps.info.outputs.skip != 'true'
         id: apply
         run: |
           # Only runs if NO conflicts (Phase 2 exits with error if conflicts detected)
@@ -555,7 +597,7 @@ jobs:
 
      # ── 5. Push feature branch ───────────────────────────────────────────────
       - name: Push feature branch
-        if: steps.info.outputs.skip != 'true' && steps.apply.outputs.applied == 'true'
+        if: steps.apply.outputs.applied == 'true'
         env:
           FEATURE_BRANCH: ${{ steps.setup_feature.outputs.feature_branch }}
         run: |
@@ -571,15 +613,11 @@ jobs:
 
           # ── 6. Create Pull Request ───────────────────────────────────────────────
       - name: Create Pull Request
-        if: steps.info.outputs.skip != 'true' && steps.apply.outputs.applied == 'true'
+        if: steps.apply.outputs.applied == 'true'
         env:
           GH_TOKEN:          ${{ secrets.RDKCM_RDKE }}
           FEATURE_BRANCH:    ${{ steps.setup_feature.outputs.feature_branch }}
-          SUPPORT_BRANCH:    ${{ steps.info.outputs.support_branch }}
-          TICKET:            ${{ steps.info.outputs.ticket }}
-          VERSION:           ${{ steps.info.outputs.version }}
-          PR_TITLE:          ${{ steps.info.outputs.pr_title }}
-          ORIGINAL_PR:       ${{ steps.info.outputs.pr_url }}
+          ORIGINAL_PR:       ${{ env.PR_URL }}
           CONFLICT_RESOLVED: ${{ steps.apply.outputs.conflict_resolved }}
           ORIGINAL_PR_BODY:  ${{ github.event.pull_request.body }}
         run: |
