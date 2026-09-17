@@ -1283,6 +1283,7 @@ namespace WPEFramework
             }
             success.success = (returnStatus)? true : false;
             LOGINFO("Exiting ...");
+            LOGINFO("Added new Log here");
             return (returnStatus)? Core::ERROR_NONE : Core::ERROR_GENERAL;
         }
 
