@@ -161,7 +161,7 @@ jobs:
             SUPPORT_BRANCHES+=("$b")
           done
 
-          BRANCHES_JSON=$(printf '%s\n' "${SUPPORT_BRANCHES[@]}" | jq -R . | jq -sc .)
+          BRANCHES_JSON=$(printf '%s\n' "${SUPPORT_BRANCHES[@]}" | sort -u | jq -R . | jq -sc .)
           
           # ── Extract and validate ticket (prefer PR title, then branch, then fallback) ─────────
           TICKET=$(echo "$PR_TITLE" | grep -oE '[A-Z]+-[0-9]+' | head -1 || true)
@@ -257,6 +257,8 @@ jobs:
       # ── 3. Create or checkout feature branch from support ────────────────────
       - name: Create or checkout feature branch
         id: setup_feature
+        env:
+          GH_TOKEN: ${{ secrets.RDKCM_RDKE }}
         run: |
           set -euo pipefail
           
@@ -589,7 +591,9 @@ jobs:
             exit 1
           fi
 
-          git push origin "$FEATURE_BRANCH" --force
+          # No --force: this branch is guaranteed new by the uniqueness loop above;
+          # a rejected push here signals that assumption was violated.
+          git push origin "$FEATURE_BRANCH"
 
 
           # ── 6. Create Pull Request ───────────────────────────────────────────────
