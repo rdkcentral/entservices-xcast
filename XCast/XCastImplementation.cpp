@@ -1323,7 +1323,7 @@ namespace WPEFramework
                 else
                 {
                     LOGINFO("changing power state [%d] -> [%d] success",cur_powerState,new_powerState);
-                    LOGINFO("Adding New log");
+                    LOGINFO("My Second log");
                 }
             }
             return ret;
