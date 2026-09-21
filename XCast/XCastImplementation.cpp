@@ -1283,7 +1283,6 @@ namespace WPEFramework
             }
             success.success = (returnStatus)? true : false;
             LOGINFO("Exiting ...");
-            LOGINFO("LOG1");
             return (returnStatus)? Core::ERROR_NONE : Core::ERROR_GENERAL;
         }
 
@@ -1320,13 +1319,10 @@ namespace WPEFramework
                 {
                     ret = false;
                     LOGINFO("Failed to change power state [%d] -> [%d] ret[%x]",cur_powerState,new_powerState,ret);
-                    LOGINFO("Mylog support to develop");
                 }
                 else
                 {
                     LOGINFO("changing power state [%d] -> [%d] success",cur_powerState,new_powerState);
-                    LOGINFO("LOG6");
-                    LOGINFO("Latest Log added");
                 }
             }
             return ret;
