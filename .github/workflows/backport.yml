@@ -16,6 +16,7 @@ on:
     types: [closed]
     branches:
       - dummy_develop
+      - dummy_develop_poc
       - dummy_support-old
       - 'support/**'
       - 'release/**'
