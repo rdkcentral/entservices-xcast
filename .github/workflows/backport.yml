@@ -158,9 +158,14 @@ jobs:
                 b="support/${v}"
               fi
               echo "✅ Numeric version accepted: '$v' → branch: $b"
+            elif git ls-remote --exit-code --heads origin "$v" > /dev/null 2>&1; then
+              # Fallback: doesn't match any known shorthand, but an exact branch
+              # with this name already exists on origin — accept it literally.
+              b="$v"
+              echo "✅ Existing branch accepted as-is: '$v' → branch: $b"
             else
               echo "❌ Invalid backport_to value: '$v'"
-              echo "   Allowed values: 'none', 'develop', or semantic numeric like 8.3.4 or 8.3.4.0"
+              echo "   Allowed values: 'none', 'develop', support/release paths, semantic numeric like 8.3.4 or 8.3.4.0, or an existing branch name"
               exit 1
             fi
             SUPPORT_BRANCHES+=("$b")

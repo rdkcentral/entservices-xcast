@@ -184,6 +184,11 @@ jobs:
                 b="support/${v}"
               fi
               echo "  ✅ '$v' accepted → branch: $b"
+            elif git ls-remote --exit-code --heads origin "$v" > /dev/null 2>&1; then
+              # Fallback: doesn't match any known shorthand, but an exact branch
+              # with this name already exists on origin — accept it literally.
+              b="$v"
+              echo "  ✅ '$v' accepted as existing branch → branch: $b"
             else
               echo "  ❌ VALIDATION FAILED: Invalid backport_to value '$v'"
               echo ""
