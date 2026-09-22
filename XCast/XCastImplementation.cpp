@@ -334,6 +334,7 @@ namespace WPEFramework
             }
             else {
                 LOGERR("Failed to get PowerManager instance");
+                LOGINFO("Multi-branch backport test from poc");
             }
             LOGINFO("Exiting ...");
         }
