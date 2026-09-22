@@ -337,7 +337,7 @@ namespace WPEFramework
                 checkPowerAndNetworkStandbyStates();
             }
             else {
-                LOGERR("Failed to get PowerManager instance");
+                LOGERR("Failed to get PowerManager instance - poc variant");
             }
             LOGINFO("Exiting ...");
         }
