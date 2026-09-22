@@ -155,6 +155,10 @@ jobs:
             if echo "$v" | grep -qiE '^(dummy_)?develop$'; then
               b=$(echo "$v" | tr '[:upper:]' '[:lower:]')
               echo "  ✅ '$v' accepted → branch: $b"
+            elif echo "$v" | grep -qiE '^(support|release)/'; then
+              # Already a full branch path (e.g. "support/8.6.3.0") — use as-is.
+              b="$v"
+              echo "  ✅ '$v' accepted as full branch path → branch: $b"
             elif echo "$v" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+(\.[0-9]+)?$'; then
               IFS='.' read -ra PARTS <<< "$v"
               LEADING_ZERO=false
