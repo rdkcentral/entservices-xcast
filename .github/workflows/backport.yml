@@ -139,12 +139,16 @@ jobs:
             done
           fi
 
-          # ── Validate: Simplified rules (develop | X.Y.Z(.W)) per target ───
+          # ── Validate: Simplified rules (develop | X.Y.Z(.W) | full branch path) ─
           SUPPORT_BRANCHES=()
           for v in "${CLEAN_LIST[@]}"; do
             if echo "$v" | grep -qiE '^(dummy_)?develop$'; then
               b=$(echo "$v" | tr '[:upper:]' '[:lower:]')
               echo "✅ Target mapped: '$v' → branch: $b"
+            elif echo "$v" | grep -qiE '^(support|release)/'; then
+              # Already a full branch path (e.g. "support/8.6.3.0") — use as-is.
+              b="$v"
+              echo "✅ Branch path accepted: '$v' → branch: $b"
             elif echo "$v" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+(\.[0-9]+)?$'; then
               # Map 3-part versions to support/X.Y.Z.0 for compatibility
               IFS='.' read -ra PARTS <<< "$v"
@@ -326,9 +330,7 @@ jobs:
           echo "Using feature branch: $FEATURE_BRANCH"
 
           echo "Creating new feature branch '$FEATURE_BRANCH' from '$SUPPORT_BRANCH'..."
-          #git checkout -b "$FEATURE_BRANCH" "origin/$SUPPORT_BRANCH"
-          FEATURE_BRANCH=feature/RDKEMW-21092_21
-          git checkout $FEATURE_BRANCH
+          git checkout -b "$FEATURE_BRANCH" "origin/$SUPPORT_BRANCH"
           
           # Verify checkout succeeded
           CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
