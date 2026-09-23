@@ -22,9 +22,12 @@
 #include "Module.h"
 #include <interfaces/IProcessWatcher.h>
 #include <interfaces/IResourceMonitor.h>
+#include <interfaces/IResourceManagerTop.h>
 #include <interfaces/JProcessWatcher.h>
 #include "UtilsLogging.h"
 #include "tracing/Logging.h"
+#include <memory>
+#include <cinttypes>
 
 namespace WPEFramework {
 namespace Plugin {
@@ -112,6 +115,30 @@ namespace Plugin {
             END_INTERFACE_MAP
         };
 
+        // Receives ResourceManagerTop's multiplication result notification via COM-RPC.
+        class ResourceManagerTopSink : public Exchange::IResourceManagerTop::IMultiplicationResultNotification {
+        private:
+            ResourceManagerTopSink() = delete;
+            ResourceManagerTopSink(const ResourceManagerTopSink&) = delete;
+            ResourceManagerTopSink& operator=(const ResourceManagerTopSink&) = delete;
+
+        public:
+            explicit ResourceManagerTopSink(ProcessWatcher* parent)
+            {
+                ASSERT(parent != nullptr);
+            }
+            ~ResourceManagerTopSink() override = default;
+
+            void OnMultiplicationResult(const int64_t result) override
+            {
+                LOGINFO("[ProcessWatcher] ResourceManagerTop multiplication result: %" PRId64, result);
+            }
+
+            BEGIN_INTERFACE_MAP(ResourceManagerTopSink)
+            INTERFACE_ENTRY(Exchange::IResourceManagerTop::IMultiplicationResultNotification)
+            END_INTERFACE_MAP
+        };
+
     public:
         ProcessWatcher(const ProcessWatcher&) = delete;
         ProcessWatcher& operator=(const ProcessWatcher&) = delete;
@@ -134,6 +161,7 @@ namespace Plugin {
     private:
         void Deactivated(RPC::IRemoteConnection* connection);
         bool KillProcessViaResourceMonitor(int pid);
+        void onAdditionResult(const JsonObject& parameters);
 
     private:
         PluginHost::IShell*               _service{};
@@ -142,6 +170,10 @@ namespace Plugin {
         Core::Sink<Notification>          _notification;
         Core::Sink<ResourceMonitorSink>   _resourceMonitorSink;
         Exchange::IResourceMonitor*       _resourceMonitorService{};
+        Core::Sink<ResourceManagerTopSink> _resourceManagerTopSink;
+        Exchange::IResourceManagerTop*    _resourceManagerTopService{};
+        std::shared_ptr<WPEFramework::JSONRPC::SmartLinkType<WPEFramework::Core::JSON::IElement>> _resourceManagerTopLink;
+        bool                              _additionResultSubscribed{false};
 
         friend class Notification;
     };

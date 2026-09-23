@@ -48,6 +48,10 @@ namespace WPEFramework {
             , _notification(this)
             , _resourceMonitorSink(this)
             , _resourceMonitorService(nullptr)
+            , _resourceManagerTopSink(this)
+            , _resourceManagerTopService(nullptr)
+            , _resourceManagerTopLink(nullptr)
+            , _additionResultSubscribed(false)
         {
             SYSLOG(Logging::Startup, (_T("ProcessWatcher Constructor")));
         }
@@ -121,6 +125,30 @@ namespace WPEFramework {
                 LOGINFO("ProcessWatcher::Initialize: ResourceMonitor not available, skipping subscription");
             }
 
+            // Subscribe to ResourceManagerTop's onAdditionResult JSON-RPC event.
+            _resourceManagerTopLink = std::make_shared<WPEFramework::JSONRPC::SmartLinkType<WPEFramework::Core::JSON::IElement>>(
+                _T("org.rdk.ResourceManagerTop"), _T("org.rdk.ProcessWatcher"));
+            if (_resourceManagerTopLink) {
+                uint32_t errCode = _resourceManagerTopLink->Subscribe<JsonObject>(
+                    5000, _T("onAdditionResult"), &ProcessWatcher::onAdditionResult, this);
+                if (Core::ERROR_NONE == errCode) {
+                    _additionResultSubscribed = true;
+                } else {
+                    LOGERR("ProcessWatcher::Initialize: Subscribe to onAdditionResult failed, errCode: %u", errCode);
+                }
+            }
+
+            // Register for ResourceManagerTop's multiplication result COM-RPC notification.
+            Exchange::IResourceManagerTop* rmt =
+                service->QueryInterfaceByCallsign<Exchange::IResourceManagerTop>("org.rdk.ResourceManagerTop");
+            if (rmt != nullptr) {
+                rmt->Register(static_cast<Exchange::IResourceManagerTop::IMultiplicationResultNotification*>(
+                    &_resourceManagerTopSink));
+                _resourceManagerTopService = rmt;  // keep ref; released after Unregister in Deinitialize
+            } else {
+                LOGINFO("ProcessWatcher::Initialize: ResourceManagerTop not available, skipping subscription");
+            }
+
             if (!message.empty()) {
                 LOGERR("'%s'", message.c_str());
             }
@@ -154,6 +182,18 @@ namespace WPEFramework {
             }
 
             if (_service != nullptr) {
+                if (_resourceManagerTopService != nullptr) {
+                    _resourceManagerTopService->Unregister(
+                        static_cast<Exchange::IResourceManagerTop::IMultiplicationResultNotification*>(
+                            &_resourceManagerTopSink));
+                    _resourceManagerTopService->Release();
+                    _resourceManagerTopService = nullptr;
+                }
+                if (_resourceManagerTopLink && _additionResultSubscribed) {
+                    _resourceManagerTopLink->Unsubscribe(5000, _T("onAdditionResult"));
+                    _additionResultSubscribed = false;
+                }
+                _resourceManagerTopLink.reset();
                 if (_resourceMonitorService != nullptr) {
                     _resourceMonitorService->Unregister(
                         static_cast<Exchange::IResourceMonitor::IInitializationNotification*>(
@@ -214,6 +254,15 @@ namespace WPEFramework {
 
             LOGINFO("KillProcessViaResourceMonitor: pid=%d result=%s", pid, result ? "success" : "failed");
             return result;
+        }
+
+        // ---------------------------------------------------------------------
+        // JSON-RPC subscription callback for ResourceManagerTop's onAdditionResult.
+        // ---------------------------------------------------------------------
+        void ProcessWatcher::onAdditionResult(const JsonObject& parameters)
+        {
+            LOGINFO("[ProcessWatcher] ResourceManagerTop addition result: %s",
+                    parameters["result"].String().c_str());
         }
 
     } // namespace Plugin
