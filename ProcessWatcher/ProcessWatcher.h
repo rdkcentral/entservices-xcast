@@ -22,6 +22,7 @@
 #include "Module.h"
 #include <interfaces/IProcessWatcher.h>
 #include <interfaces/IResourceMonitor.h>
+#include <interfaces/IResourceManagerTop.h>
 #include <interfaces/json/JProcessWatcher.h>
 #include "UtilsLogging.h"
 #include "tracing/Logging.h"
