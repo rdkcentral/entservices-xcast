@@ -183,6 +183,15 @@ protected:
     {
         Core::hresult status = Core::ERROR_GENERAL;
 
+        // Reset test fixture state for each test
+        _networkStandbyModeChangedNotification = nullptr;
+        _modeChangedNotification = nullptr;
+        _powerState = Exchange::IPowerManager::POWER_STATE_OFF;
+        _networkManagerNotification = nullptr;
+        _networkStandbyMode = false;
+        _gdialConnectedPromise = std::promise<void>();
+        _gdialConnectSignaled = false;
+
         p_wrapsImplMock = new NiceMock<WrapsImplMock>;
         printf("Pass created wrapsImplMock: %p ", p_wrapsImplMock);
         Wraps::setImpl(p_wrapsImplMock);
@@ -287,6 +296,40 @@ protected:
             .WillRepeatedly(::testing::Invoke(
                 [&](WPEFramework::Exchange::INetworkManager::INotification* notification) -> uint32_t {
                     _networkManagerNotification = notification;
+                    return Core::ERROR_NONE;
+                }));
+
+        // Set up PowerManager mock expectations before Initialize() is called
+        // because registerPowerEventHandlers() is now called during InitializePowerManager()
+        EXPECT_CALL(PowerManagerMock::Mock(), GetPowerState(::testing::_, ::testing::_))
+            .Times(::testing::AnyNumber())
+            .WillRepeatedly(::testing::Invoke(
+                [&](PowerState& currentState, PowerState& previousState) -> uint32_t {
+                    currentState = _powerState;
+                    return Core::ERROR_NONE;
+                }));
+
+        EXPECT_CALL(PowerManagerMock::Mock(), GetNetworkStandbyMode(::testing::_))
+            .Times(::testing::AnyNumber())
+            .WillRepeatedly(::testing::Invoke(
+                [&](bool& mode) -> uint32_t {
+                    mode = _networkStandbyMode;
+                    return Core::ERROR_NONE;
+                }));
+
+        EXPECT_CALL(PowerManagerMock::Mock(), Register(::testing::Matcher<Exchange::IPowerManager::INetworkStandbyModeChangedNotification*>(::testing::_)))
+            .Times(::testing::AnyNumber())
+            .WillRepeatedly(::testing::Invoke(
+                [&](Exchange::IPowerManager::INetworkStandbyModeChangedNotification* notification) -> uint32_t {
+                    _networkStandbyModeChangedNotification = notification;
+                    return Core::ERROR_NONE;
+                }));
+
+        EXPECT_CALL(PowerManagerMock::Mock(), Register(::testing::Matcher<Exchange::IPowerManager::IModeChangedNotification*>(::testing::_)))
+            .Times(::testing::AnyNumber())
+            .WillRepeatedly(::testing::Invoke(
+                [&](Exchange::IPowerManager::IModeChangedNotification* notification) -> uint32_t {
+                    _modeChangedNotification = notification;
                     return Core::ERROR_NONE;
                 }));
 

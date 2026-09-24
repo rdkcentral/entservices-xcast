@@ -206,6 +206,17 @@ namespace WPEFramework
                 _appActionsPlugin->Release();
                 _appActionsPlugin = nullptr;
             }
+            // Reset static variables to default values for test isolation
+            #ifdef XCAST_ENABLED_BY_DEFAULT
+            m_xcastEnable = true;
+            #else
+            m_xcastEnable = false;
+            #endif
+            #ifdef XCAST_ENABLED_BY_DEFAULT_IN_STANDBY
+            m_standbyBehavior = true;
+            #else
+            m_standbyBehavior = false;
+            #endif
             LOGINFO("Exiting ...");
         }
 
