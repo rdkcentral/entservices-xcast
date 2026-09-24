@@ -174,6 +174,18 @@ namespace WPEFramework
         void XCastImplementation::Deinitialize(void)
         {
             LOGINFO("Entering..!!!");
+
+            // Wait for any active power mode change threads to complete before destroying resources
+            // This prevents race conditions where the thread tries to use destroyed objects
+            int waitCount = 0;
+            while (powerModeChangeActive && waitCount < 50) {
+                usleep(100000); // 100ms
+                waitCount++;
+            }
+            if (powerModeChangeActive) {
+                LOGWARN("Power mode change thread still active after waiting, proceeding with cleanup");
+            }
+
             if(nullptr != m_xcast_manager)
             {
                 stopTimer();
