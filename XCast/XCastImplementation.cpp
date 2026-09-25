@@ -19,6 +19,7 @@
 
 #include "XCastImplementation.h"
 #include <sys/prctl.h>
+#include <atomic>
 
 #include "UtilsJsonRpc.h"
 #include "UtilsIarm.h"
@@ -66,7 +67,10 @@ namespace WPEFramework
         bool m_networkStandbyMode = false;
         string m_friendlyName = "";
 
-        bool powerModeChangeActive = false;
+        // Tracks the number of in-flight threadPowerModeChangeEvent threads; a plain bool
+        // is unsafe here since multiple threads can be spawned concurrently and one
+        // finishing (setting false) must not unblock Deinitialize while others are still running.
+        std::atomic<int> powerModeChangeActiveCount{0};
 
         static string friendlyNameCache = "Living Room";
         static string m_activeInterfaceName = "";
@@ -175,14 +179,14 @@ namespace WPEFramework
         {
             LOGINFO("Entering..!!!");
 
-            // Wait for any active power mode change threads to complete before destroying resources
-            // This prevents race conditions where the thread tries to use destroyed objects
+            // Wait for all active power mode change threads to complete before destroying resources
+            // This prevents race conditions where a thread tries to use destroyed objects
             int waitCount = 0;
-            while (powerModeChangeActive && waitCount < 50) {
+            while ((powerModeChangeActiveCount.load() > 0) && waitCount < 50) {
                 usleep(100000); // 100ms
                 waitCount++;
             }
-            if (powerModeChangeActive) {
+            if (powerModeChangeActiveCount.load() > 0) {
                 LOGWARN("Power mode change thread still active after waiting, proceeding with cleanup");
             }
 
@@ -653,7 +657,7 @@ namespace WPEFramework
 
         void XCastImplementation::threadPowerModeChangeEvent(void)
         {
-            powerModeChangeActive = true;
+            powerModeChangeActiveCount++;
             LOGINFO(" threadPowerModeChangeEvent m_standbyBehavior:%d , m_powerState:%d ",m_standbyBehavior,m_powerState);
             if(m_powerState == WPEFramework::Exchange::IPowerManager::POWER_STATE_ON)
             {
@@ -680,7 +684,7 @@ namespace WPEFramework
                 }
                 enableCastService(m_friendlyName, enabledStatus);
             }
-            powerModeChangeActive = false;
+            powerModeChangeActiveCount--;
         }
 
         void XCastImplementation::networkStandbyModeChangeEvent(void)
