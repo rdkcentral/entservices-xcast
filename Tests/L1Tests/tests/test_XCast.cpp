@@ -365,6 +365,14 @@ protected:
     {
         TEST_LOG("In releaseResources!");
 
+        dispatcher->Deactivate();
+        dispatcher->Release();
+
+        // Deinitialize the plugin (which waits for in-flight worker threads, e.g. power-mode-change
+        // threads, to finish) before resetting/deleting the mocks below, otherwise a still-running
+        // worker thread can dereference an already-destroyed mock and crash.
+        plugin->Deinitialize(mServiceMock);
+
         Wraps::setImpl(nullptr);
         if (p_wrapsImplMock != nullptr)
         {
@@ -386,10 +394,6 @@ protected:
         PluginHost::IFactories::Assign(nullptr);
         IarmBus::setImpl(nullptr);
 
-        dispatcher->Deactivate();
-        dispatcher->Release();
-
-        plugin->Deinitialize(mServiceMock);
         delete mockNetworkManager;
         delete mServiceMock;
     }
