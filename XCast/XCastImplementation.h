@@ -31,6 +31,8 @@
  
 #include <com/com.h>
 #include <core/core.h>
+#include <atomic>
+#include <memory>
 #include <mutex>
 #include <vector>
 #include <glib.h> 
@@ -53,6 +55,25 @@ namespace WPEFramework
     namespace Plugin
     {
         WPEFramework::Exchange::IPowerManager::PowerState m_powerState = WPEFramework::Exchange::IPowerManager::POWER_STATE_STANDBY;
+
+        // Tracks the number of in-flight threadPowerModeChangeEvent threads; reserved before a worker
+        // is detached so Deinitialize() never observes zero while a worker is still starting/running.
+        std::atomic<int> powerModeChangeActiveCount{0};
+
+        // Generic RAII helper: reserves (increments) an atomic counter on construction and releases
+        // (decrements) it on destruction. Reusable for tracking any in-flight worker/operation count.
+        class ScopedCounter
+        {
+            public:
+                explicit ScopedCounter(std::atomic<int>& counter) : _counter(counter) { ++_counter; }
+                ~ScopedCounter() { --_counter; }
+                ScopedCounter(const ScopedCounter&) = delete;
+                ScopedCounter& operator=(const ScopedCounter&) = delete;
+
+            private:
+                std::atomic<int>& _counter;
+        };
+
         class XCastImplementation : public Exchange::IXCast,public Exchange::IConfiguration, public XCastNotifier 
         {
          public:
@@ -145,7 +166,13 @@ namespace WPEFramework
                         LOGINFO("onPowerModeChanged: State Changed [%d] -- > [%d]",currentState, newState);
                         m_powerState = newState;
                         LOGINFO("creating worker thread for threadPowerModeChangeEvent m_powerState :%d",m_powerState);
-                        std::thread powerModeChangeThread = std::thread(&XCastImplementation::threadPowerModeChangeEvent,&_parent);
+                        // The guard reserves the slot here (calling thread) before the worker starts, and
+                        // releases it automatically once the worker thread's callable returns.
+                        auto guard = std::make_shared<ScopedCounter>(powerModeChangeActiveCount);
+                        XCastImplementation* parent = &_parent;
+                        std::thread powerModeChangeThread([parent, guard]() {
+                            parent->threadPowerModeChangeEvent();
+                        });
                         powerModeChangeThread.detach();
                     }
 
@@ -328,6 +355,9 @@ namespace WPEFramework
 
             Exchange::IAppManager* _appManagerPlugin;
             Core::Sink<AppManagerNotification> _appManagerNotification;
+            // Serializes in-flight OnAppLifecycleStateChanged callbacks with Deinitialize's teardown
+            // of m_xcast_manager/_appManagerPlugin to prevent a use-after-free.
+            std::mutex _appManagerCallbackLock;
 
             Exchange::IAppActions* _appActionsPlugin;
 

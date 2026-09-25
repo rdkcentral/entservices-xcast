@@ -19,7 +19,6 @@
 
 #include "XCastImplementation.h"
 #include <sys/prctl.h>
-#include <atomic>
 
 #include "UtilsJsonRpc.h"
 #include "UtilsIarm.h"
@@ -66,11 +65,6 @@ namespace WPEFramework
 
         bool m_networkStandbyMode = false;
         string m_friendlyName = "";
-
-        // Tracks the number of in-flight threadPowerModeChangeEvent threads; a plain bool
-        // is unsafe here since multiple threads can be spawned concurrently and one
-        // finishing (setting false) must not unblock Deinitialize while others are still running.
-        std::atomic<int> powerModeChangeActiveCount{0};
 
         static string friendlyNameCache = "Living Room";
         static string m_activeInterfaceName = "";
@@ -190,15 +184,23 @@ namespace WPEFramework
                 LOGWARN("Power mode change thread still active after waiting, proceeding with cleanup");
             }
 
+            // Unregister all event listeners before tearing down m_xcast_manager/plugin interfaces so
+            // no new notification can race with the teardown below. An AppManager callback already
+            // in flight is additionally serialized via _appManagerCallbackLock.
+            unregisterPowerEventHandlers();
+            unregisterNetworkEventHandlers();
+            unregisterSystemEventHandlers();
+            {
+                lock_guard<mutex> lck(_appManagerCallbackLock);
+                unregisterAppManagerEventHandlers();
+            }
+
             if(nullptr != m_xcast_manager)
             {
                 stopTimer();
                 m_xcast_manager->shutdown();
                 m_xcast_manager = nullptr;
             }
-            unregisterPowerEventHandlers();
-            unregisterNetworkEventHandlers();
-            unregisterSystemEventHandlers();
             if (_powerManagerPlugin) {
                 _powerManagerPlugin.Reset();
             }
@@ -211,7 +213,6 @@ namespace WPEFramework
                 _systemServicesPlugin->Release();
                 _systemServicesPlugin = nullptr;
             }
-            unregisterAppManagerEventHandlers();
             if (_appManagerPlugin)
             {
                 _appManagerPlugin->Release();
@@ -541,6 +542,9 @@ namespace WPEFramework
                 static_cast<int>(oldState), static_cast<int>(newState),
                 static_cast<int>(errorReason));
 
+            // Blocks Deinitialize's unregister/teardown until this in-flight callback completes.
+            lock_guard<mutex> lck(_appManagerCallbackLock);
+
             if (nullptr == m_xcast_manager)
             {
                 return;
@@ -657,7 +661,6 @@ namespace WPEFramework
 
         void XCastImplementation::threadPowerModeChangeEvent(void)
         {
-            powerModeChangeActiveCount++;
             LOGINFO(" threadPowerModeChangeEvent m_standbyBehavior:%d , m_powerState:%d ",m_standbyBehavior,m_powerState);
             if(m_powerState == WPEFramework::Exchange::IPowerManager::POWER_STATE_ON)
             {
@@ -684,7 +687,6 @@ namespace WPEFramework
                 }
                 enableCastService(m_friendlyName, enabledStatus);
             }
-            powerModeChangeActiveCount--;
         }
 
         void XCastImplementation::networkStandbyModeChangeEvent(void)
@@ -1210,7 +1212,11 @@ namespace WPEFramework
             success.success = false;
             if ((!_registeredPowerEventHandlers) && (enabled))
             {
+                // Fallback for when the early registration in InitializePowerManager() did not run
+                // (e.g. _powerManagerPlugin was not yet available); registerPowerEventHandlers() is a
+                // no-op if already registered, so this preserves lazy registration without duplicating it.
                 checkPowerAndNetworkStandbyStates();
+                registerPowerEventHandlers();
             }
 
             if (m_xcastEnable && ( (m_standbyBehavior == true) || ((m_standbyBehavior == false)&&(m_powerState == WPEFramework::Exchange::IPowerManager::POWER_STATE_ON))))
