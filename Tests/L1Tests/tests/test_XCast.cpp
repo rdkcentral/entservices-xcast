@@ -183,6 +183,15 @@ protected:
     {
         Core::hresult status = Core::ERROR_GENERAL;
 
+        // Reset test fixture state for each test
+        _networkStandbyModeChangedNotification = nullptr;
+        _modeChangedNotification = nullptr;
+        _powerState = Exchange::IPowerManager::POWER_STATE_OFF;
+        _networkManagerNotification = nullptr;
+        _networkStandbyMode = false;
+        _gdialConnectedPromise = std::promise<void>();
+        _gdialConnectSignaled = false;
+
         p_wrapsImplMock = new NiceMock<WrapsImplMock>;
         printf("Pass created wrapsImplMock: %p ", p_wrapsImplMock);
         Wraps::setImpl(p_wrapsImplMock);
@@ -290,6 +299,40 @@ protected:
                     return Core::ERROR_NONE;
                 }));
 
+        // Set up PowerManager mock expectations before Initialize() is called
+        // because registerPowerEventHandlers() is now called during InitializePowerManager()
+        EXPECT_CALL(PowerManagerMock::Mock(), GetPowerState(::testing::_, ::testing::_))
+            .Times(::testing::AnyNumber())
+            .WillRepeatedly(::testing::Invoke(
+                [&](PowerState& currentState, PowerState& previousState) -> uint32_t {
+                    currentState = _powerState;
+                    return Core::ERROR_NONE;
+                }));
+
+        EXPECT_CALL(PowerManagerMock::Mock(), GetNetworkStandbyMode(::testing::_))
+            .Times(::testing::AnyNumber())
+            .WillRepeatedly(::testing::Invoke(
+                [&](bool& mode) -> uint32_t {
+                    mode = _networkStandbyMode;
+                    return Core::ERROR_NONE;
+                }));
+
+        EXPECT_CALL(PowerManagerMock::Mock(), Register(::testing::Matcher<Exchange::IPowerManager::INetworkStandbyModeChangedNotification*>(::testing::_)))
+            .Times(::testing::AnyNumber())
+            .WillRepeatedly(::testing::Invoke(
+                [&](Exchange::IPowerManager::INetworkStandbyModeChangedNotification* notification) -> uint32_t {
+                    _networkStandbyModeChangedNotification = notification;
+                    return Core::ERROR_NONE;
+                }));
+
+        EXPECT_CALL(PowerManagerMock::Mock(), Register(::testing::Matcher<Exchange::IPowerManager::IModeChangedNotification*>(::testing::_)))
+            .Times(::testing::AnyNumber())
+            .WillRepeatedly(::testing::Invoke(
+                [&](Exchange::IPowerManager::IModeChangedNotification* notification) -> uint32_t {
+                    _modeChangedNotification = notification;
+                    return Core::ERROR_NONE;
+                }));
+
         // XCastImplementation::Initialize() now always defers the first GDial connect to the
         // locate-cast timer instead of connecting synchronously. ActivationChanged is always
         // invoked once that deferred connect succeeds, so use it as the readiness signal instead
@@ -322,6 +365,14 @@ protected:
     {
         TEST_LOG("In releaseResources!");
 
+        dispatcher->Deactivate();
+        dispatcher->Release();
+
+        // Deinitialize the plugin (which waits for in-flight worker threads, e.g. power-mode-change
+        // threads, to finish) before resetting/deleting the mocks below, otherwise a still-running
+        // worker thread can dereference an already-destroyed mock and crash.
+        plugin->Deinitialize(mServiceMock);
+
         Wraps::setImpl(nullptr);
         if (p_wrapsImplMock != nullptr)
         {
@@ -343,10 +394,6 @@ protected:
         PluginHost::IFactories::Assign(nullptr);
         IarmBus::setImpl(nullptr);
 
-        dispatcher->Deactivate();
-        dispatcher->Release();
-
-        plugin->Deinitialize(mServiceMock);
         delete mockNetworkManager;
         delete mServiceMock;
     }
@@ -668,7 +715,7 @@ TEST_F(XCastTest, unRegisterAllApplications)
                 return GDIAL_SERVICE_ERROR_NONE;
             }));
 
-    EXPECT_EQ(Core::ERROR_NONE, mJsonRpcHandler.Invoke(connection, _T("registerApplications"), _T("{\"applications\": [{\"name\": \"Youtube\",\"prefix\": \"myYouTube\",\"cors\": \".youtube.com\",\"query\": \"source_type=12\",\"payload\": \"youtube_payload\",\"allowStop\": 1 },{\"name\": \"Netflix\",\"prefix\": \"myNetflix\",\"cors\": \".netflix.com\",\"query\": \"source_type=12\",\"payload\": \"netflix_payload\",\"allowStop\": 0}]}"), response));
+    EXPECT_EQ(Core::ERROR_NONE, mJsonRpcHandler.Invoke(connection, _T("registerApplications"), _T("{\"applications\": [{\"name\": \"Youtube\",\"appId\": \"com.youtube\",\"prefix\": \"myYouTube\",\"cors\": \".youtube.com\",\"query\": \"source_type=12\",\"payload\": \"youtube_payload\",\"allowStop\": 1 },{\"name\": \"Netflix\",\"appId\": \"com.netflix\",\"prefix\": \"myNetflix\",\"cors\": \".netflix.com\",\"query\": \"source_type=12\",\"payload\": \"netflix_payload\",\"allowStop\": 0}]}"), response));
     EXPECT_EQ(response, string("{\"success\":true}"));
 
     EXPECT_EQ(Core::ERROR_NONE, mJsonRpcHandler.Invoke(connection, _T("unregisterApplications"), _T("{\"applications\": [\"Youtube\"]}"), response));
