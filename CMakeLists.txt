@@ -2,7 +2,7 @@
 # If not stated otherwise in this file or this component's LICENSE
 # file the following copyright and licenses apply:
 #
-# Copyright 2023 RDK Management
+# Copyright 2024 RDK Management
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -40,12 +40,8 @@ if(ENABLE_COMMUNITY_DEVICE_TYPE)
    add_definitions(-DENABLE_COMMUNITY_DEVICE_TYPE)
 endif()
 
-if(RDK_SERVICES_L1_TEST)
-    add_subdirectory(Tests/L1Tests)
-endif()
-
-if(PLUGIN_XCAST)
-    add_subdirectory(XCast)
+if(PLUGIN_PLAYBINPLUGIN)
+    add_subdirectory(PlaybinPlugin)
 endif()
 
 if(WPEFRAMEWORK_CREATE_IPKG_TARGETS)
