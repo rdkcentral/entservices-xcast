@@ -191,6 +191,12 @@ touch rdk_logger_milestone.h
 touch gdialservice.h
 touch gdialservicecommon.h
 echo "files created successfully"
+
+# Create mock libraries for Coverity build
+install -d /usr/lib/wpeframework/proxystubs /usr/lib
+cc -shared -x c -o /usr/lib/wpeframework/proxystubs/libWPEFrameworkNetworkManagerProxy.so /dev/null
+cc -shared -x c -o /usr/lib/libgdial-server.so /dev/null
+echo "mock libraries created successfully"
 echo "======================================================================================"
 
 cd ../../
