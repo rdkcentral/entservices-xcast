@@ -1284,6 +1284,7 @@ namespace WPEFramework
             }
             else {
                 LOGINFO("CastService not enabled");
+                LOGINFO("New Log: CastService not enabled");
             }
             success.success = (returnStatus)? true : false;
             LOGINFO("Exiting ...");
