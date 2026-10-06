@@ -580,10 +580,10 @@ namespace WPEFramework
                 case Exchange::IAppManager::APP_STATE_INITIALIZING:
                 case Exchange::IAppManager::APP_STATE_RUNNING:
                 case Exchange::IAppManager::APP_STATE_ACTIVE:
-                case Exchange::IAppManager::APP_STATE_PAUSED:
                     appstate = "running";
                     break;
                 case Exchange::IAppManager::APP_STATE_SUSPENDED:
+                case Exchange::IAppManager::APP_STATE_PAUSED:
                 case Exchange::IAppManager::APP_STATE_HIBERNATED:
                     appstate = "suspended";
                     break;
