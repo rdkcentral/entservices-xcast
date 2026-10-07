@@ -32,8 +32,13 @@
 #include <com/com.h>
 #include <core/core.h>
 #include <atomic>
+#include <chrono>
+#include <condition_variable>
+#include <deque>
+#include <functional>
 #include <memory>
 #include <mutex>
+#include <thread>
 #include <vector>
 #include <glib.h> 
 
@@ -54,26 +59,6 @@ namespace WPEFramework
 {
     namespace Plugin
     {
-        WPEFramework::Exchange::IPowerManager::PowerState m_powerState = WPEFramework::Exchange::IPowerManager::POWER_STATE_STANDBY;
-
-        // Tracks the number of in-flight threadPowerModeChangeEvent threads; reserved before a worker
-        // is detached so Deinitialize() never observes zero while a worker is still starting/running.
-        std::atomic<int> powerModeChangeActiveCount{0};
-
-        // Generic RAII helper: reserves (increments) an atomic counter on construction and releases
-        // (decrements) it on destruction. Reusable for tracking any in-flight worker/operation count.
-        class ScopedCounter
-        {
-            public:
-                explicit ScopedCounter(std::atomic<int>& counter) : _counter(counter) { ++_counter; }
-                ~ScopedCounter() { --_counter; }
-                ScopedCounter(const ScopedCounter&) = delete;
-                ScopedCounter& operator=(const ScopedCounter&) = delete;
-
-            private:
-                std::atomic<int>& _counter;
-        };
-
         class XCastImplementation : public Exchange::IXCast,public Exchange::IConfiguration, public XCastNotifier 
         {
          public:
@@ -164,24 +149,31 @@ namespace WPEFramework
                     void OnPowerModeChanged(const PowerState currentState, const PowerState newState) override
                     {
                         LOGINFO("onPowerModeChanged: State Changed [%d] -- > [%d]",currentState, newState);
-                        m_powerState = newState;
-                        LOGINFO("creating worker thread for threadPowerModeChangeEvent m_powerState :%d",m_powerState);
-                        // The guard reserves the slot here (calling thread) before the worker starts, and
-                        // releases it automatically once the worker thread's callable returns.
-                        auto guard = std::make_shared<ScopedCounter>(powerModeChangeActiveCount);
+                        m_powerState.store(newState);
+                        if (WPEFramework::Exchange::IPowerManager::POWER_STATE_STANDBY_DEEP_SLEEP == newState)
+                        {
+                            // Run inline: PowerManager invokes ActivateDeepSleep() only after the
+                            // synchronous ModeChanged callbacks return, so this is the last point at
+                            // which teardown can be guaranteed complete before the HAL suspends.
+                            _parent.prepareForDeepSleep();
+                        }
+                        // Remaining work is posted so PowerManager's callback lock is released
+                        // immediately, and serialized on the single worker so a second transition can
+                        // never run teardown while a previous one is still inside Initialize().
                         XCastImplementation* parent = &_parent;
-                        std::thread powerModeChangeThread([parent, guard]() {
+                        _parent.postEvent([parent]() {
                             parent->threadPowerModeChangeEvent();
                         });
-                        powerModeChangeThread.detach();
                     }
 
                     void OnNetworkStandbyModeChanged(const bool enabled) override
                     {
                         _parent.m_networkStandbyMode = enabled;
-                        LOGWARN("creating worker thread for threadNetworkStandbyModeChangeEvent Mode :%u", _parent.m_networkStandbyMode);
-                        std::thread networkStandbyModeChangeThread = std::thread(&XCastImplementation::networkStandbyModeChangeEvent,&_parent);
-                        networkStandbyModeChangeThread.detach();
+                        LOGWARN("queueing networkStandbyModeChangeEvent Mode :%u", _parent.m_networkStandbyMode);
+                        XCastImplementation* parent = &_parent;
+                        _parent.postEvent([parent]() {
+                            parent->networkStandbyModeChangeEvent();
+                        });
                     }
 
                     template <typename T>
@@ -338,6 +330,22 @@ namespace WPEFramework
             Core::Sink<PowerManagerNotification> _pwrMgrNotification;
             void threadPowerModeChangeEvent(void);
             void networkStandbyModeChangeEvent(void);
+
+            // Single owned worker that serializes all asynchronous plugin-event handling. Replaces the
+            // previously detached threads so work is ordered and fully quiesced before teardown.
+            void startEventWorker(void);
+            void stopEventWorker(void);
+            void postEvent(std::function<void()> task);
+            void eventWorkerLoop(void);
+
+            std::thread _eventWorker;
+            std::mutex _eventQueueLock;
+            std::condition_variable _eventQueueSignal;
+            std::deque<std::function<void()>> _eventQueue;
+            bool _eventWorkerActive;
+
+            // Written by the PowerManager callback thread, read by the event worker and JSON-RPC threads.
+            static std::atomic<PowerState> m_powerState;
             static bool m_xcastEnable;
             static bool m_standbyBehavior;
             bool m_networkStandbyMode;
@@ -369,6 +377,10 @@ namespace WPEFramework
 
             uint32_t Initialize(bool networkStandbyMode);
             void Deinitialize(void);
+            void deinitializeCastService(void);
+            void prepareForDeepSleep(void);
+            // Returns true if the wait was cut short by a shutdown request.
+            bool waitForShutdownOrTimeout(uint32_t timeoutMs);
 
             void onActiveInterfaceChange(const string prevActiveInterface, const string currentActiveinterface);
             void onIPAddressChange(const string interface, const string ipversion, const string ipaddress, const Exchange::INetworkManager::IPStatus status);

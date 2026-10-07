@@ -36,6 +36,7 @@
 
 #define LOCATE_CAST_FIRST_TIMEOUT_IN_MILLIS  5000  //5 seconds
 #define LOCATE_CAST_SECOND_TIMEOUT_IN_MILLIS 10000  //10 seconds
+#define CAST_SERVICE_RESTART_DELAY_IN_MILLIS 1000  //1 second
 
 #define DIAL_MAX_ADDITIONALURL (1024)
 
@@ -50,6 +51,8 @@ namespace WPEFramework
         static std::mutex m_appConfigMutex;
         static std::mutex m_TimerMutexSync;
         static bool xcastEnableCache = false;
+
+        std::atomic<PowerState> XCastImplementation::m_powerState{WPEFramework::Exchange::IPowerManager::POWER_STATE_STANDBY};
 
         #ifdef XCAST_ENABLED_BY_DEFAULT
         bool XCastImplementation::m_xcastEnable = true;
@@ -70,11 +73,12 @@ namespace WPEFramework
         static string m_activeInterfaceName = "";
         static bool m_isDynamicRegistrationsRequired = false;
 
-        static bool m_is_restart_req = false;
+        static std::atomic<bool> m_is_restart_req{false};
 
         XCastImplementation::XCastImplementation()
         : _service(nullptr),
         _pwrMgrNotification(*this),
+        _eventWorkerActive(false),
         m_networkStandbyMode(false),
         _registeredPowerEventHandlers(false),
         _networkManagerPlugin(nullptr),
@@ -94,8 +98,73 @@ namespace WPEFramework
         XCastImplementation::~XCastImplementation()
         {
             LOGINFO("Call destructor");
+            stopEventWorker();
             XCastImplementation::_instance = nullptr;
             _service = nullptr;
+        }
+
+        void XCastImplementation::startEventWorker(void)
+        {
+            std::lock_guard<std::mutex> lock(_eventQueueLock);
+            if (false == _eventWorkerActive)
+            {
+                _eventWorkerActive = true;
+                _eventWorker = std::thread(&XCastImplementation::eventWorkerLoop, this);
+            }
+        }
+
+        void XCastImplementation::stopEventWorker(void)
+        {
+            {
+                std::lock_guard<std::mutex> lock(_eventQueueLock);
+                if (false == _eventWorkerActive)
+                {
+                    return;
+                }
+                _eventWorkerActive = false;
+                _eventQueue.clear();
+            }
+            _eventQueueSignal.notify_all();
+            if (_eventWorker.joinable())
+            {
+                _eventWorker.join();
+            }
+            LOGINFO("Event worker stopped");
+        }
+
+        void XCastImplementation::postEvent(std::function<void()> task)
+        {
+            {
+                std::lock_guard<std::mutex> lock(_eventQueueLock);
+                if (false == _eventWorkerActive)
+                {
+                    LOGWARN("Event worker not running, dropping event");
+                    return;
+                }
+                _eventQueue.push_back(std::move(task));
+            }
+            _eventQueueSignal.notify_one();
+        }
+
+        void XCastImplementation::eventWorkerLoop(void)
+        {
+            for (;;)
+            {
+                std::function<void()> task;
+                {
+                    std::unique_lock<std::mutex> lock(_eventQueueLock);
+                    _eventQueueSignal.wait(lock, [this]() {
+                        return ((false == _eventWorkerActive) || (false == _eventQueue.empty()));
+                    });
+                    if (false == _eventWorkerActive)
+                    {
+                        break;
+                    }
+                    task = std::move(_eventQueue.front());
+                    _eventQueue.pop_front();
+                }
+                task();
+            }
         }
 
         /**
@@ -152,37 +221,68 @@ namespace WPEFramework
         uint32_t XCastImplementation::Initialize(bool networkStandbyMode)
         {
             LOGINFO("Entering..!!!");
-            if(nullptr == m_xcast_manager)
+            bool started = false;
             {
-                m_networkStandbyMode = networkStandbyMode;
-                m_xcast_manager  = XCastManager::getInstance();
-                if(nullptr != m_xcast_manager)
+                lock_guard<mutex> lck(m_TimerMutexSync);
+                if (WPEFramework::Exchange::IPowerManager::POWER_STATE_STANDBY_DEEP_SLEEP == m_powerState.load())
                 {
-                    m_xcast_manager->setService(this);
-                    startTimer(LOCATE_CAST_FIRST_TIMEOUT_IN_MILLIS);
+                    // A deep sleep transition raced us; leave the cast service down for the suspend.
+                    LOGWARN("Deep sleep in progress, skipping cast service start");
                 }
-                else {
-                    LOGERR("Failed to get XCastManager instance");
+                else if(nullptr == m_xcast_manager)
+                {
+                    m_networkStandbyMode = networkStandbyMode;
+                    m_xcast_manager  = XCastManager::getInstance();
+                    if(nullptr != m_xcast_manager)
+                    {
+                        m_xcast_manager->setService(this);
+                        started = true;
+                    }
+                    else {
+                        LOGERR("Failed to get XCastManager instance");
+                    }
                 }
+            }
+            if (started)
+            {
+                startTimer(LOCATE_CAST_FIRST_TIMEOUT_IN_MILLIS);
             }
             LOGINFO("Exiting ..!!!");
             return Core::ERROR_NONE;
         }
 
+        void XCastImplementation::deinitializeCastService(void)
+        {
+            // Timer is stopped outside the lock so an in-flight onLocateCastTimer callback (which holds
+            // m_TimerMutexSync while touching m_xcast_manager) can drain before the manager is destroyed.
+            stopTimer();
+            lock_guard<mutex> lck(m_TimerMutexSync);
+            if(nullptr != m_xcast_manager)
+            {
+                m_xcast_manager->shutdown();
+                m_xcast_manager = nullptr;
+            }
+        }
+
+        bool XCastImplementation::waitForShutdownOrTimeout(uint32_t timeoutMs)
+        {
+            std::unique_lock<std::mutex> lock(_eventQueueLock);
+            return _eventQueueSignal.wait_for(lock, std::chrono::milliseconds(timeoutMs), [this]() {
+                return (false == _eventWorkerActive);
+            });
+        }
+
+        void XCastImplementation::prepareForDeepSleep(void)
+        {
+            LOGINFO("Stopping cast service ahead of deep sleep");
+            m_is_restart_req.store(true); //After DEEPSLEEP, restart xdial again for next transition.
+            deinitializeCastService();
+            LOGINFO("Cast service stopped, safe to suspend");
+        }
+
         void XCastImplementation::Deinitialize(void)
         {
             LOGINFO("Entering..!!!");
-
-            // Wait for all active power mode change threads to complete before destroying resources
-            // This prevents race conditions where a thread tries to use destroyed objects
-            int waitCount = 0;
-            while ((powerModeChangeActiveCount.load() > 0) && waitCount < 50) {
-                usleep(100000); // 100ms
-                waitCount++;
-            }
-            if (powerModeChangeActiveCount.load() > 0) {
-                LOGWARN("Power mode change thread still active after waiting, proceeding with cleanup");
-            }
 
             // Unregister all event listeners before tearing down m_xcast_manager/plugin interfaces so
             // no new notification can race with the teardown below. An AppManager callback already
@@ -197,9 +297,7 @@ namespace WPEFramework
 
             if(nullptr != m_xcast_manager)
             {
-                stopTimer();
-                m_xcast_manager->shutdown();
-                m_xcast_manager = nullptr;
+                deinitializeCastService();
             }
             if (_powerManagerPlugin) {
                 _powerManagerPlugin.Reset();
@@ -313,16 +411,18 @@ namespace WPEFramework
             {
                 m_friendlyName = friendlyName;
                 LOGINFO("friendlyName[%s]",m_friendlyName.c_str());
-                std::thread friendlyNameChangeThread = std::thread(&XCastImplementation::threadSystemFriendlyNameChangeEvent,this);
-                friendlyNameChangeThread.detach();
-                LOGINFO("creating worker thread for threadFriendlyNameChangeEvent m_friendlyName[%s]",m_friendlyName.c_str());
+                XCastImplementation* self = this;
+                postEvent([self]() {
+                    self->threadSystemFriendlyNameChangeEvent();
+                });
+                LOGINFO("queueing threadFriendlyNameChangeEvent m_friendlyName[%s]",m_friendlyName.c_str());
             }
         }
 
         void XCastImplementation::threadSystemFriendlyNameChangeEvent(void)
         {
             bool enabledStatus = false;
-            if (m_xcastEnable && ( (m_standbyBehavior == true) || ((m_standbyBehavior == false)&&(m_powerState == WPEFramework::Exchange::IPowerManager::POWER_STATE_ON))))
+            if (m_xcastEnable && ( (m_standbyBehavior == true) || ((m_standbyBehavior == false)&&(m_powerState.load() == WPEFramework::Exchange::IPowerManager::POWER_STATE_ON))))
             {
                 enabledStatus = true;
             }
@@ -338,6 +438,7 @@ namespace WPEFramework
                 LOGINFO("Call initialise()");
                 _service = service;
                 _service->AddRef();
+                startEventWorker();
                 InitializePowerManager(service);
                 Initialize(m_networkStandbyMode);
                 InitializeSystemServices(service);
@@ -350,10 +451,12 @@ namespace WPEFramework
             }
             else if ((_service) && ( nullptr == service ))
             {
-                lock_guard<mutex> lck(m_TimerMutexSync);
                 LOGINFO("Call deinitialise()");
+                // Quiesce queued/in-flight event work before tearing anything down.
+                stopEventWorker();
                 Deinitialize();
                 _service->Release();
+                _service = nullptr;
             }
             else
             {
@@ -646,8 +749,8 @@ namespace WPEFramework
                 retStatus = _powerManagerPlugin->GetPowerState(pwrStateCur, pwrStatePrev);
                 if (Core::ERROR_NONE == retStatus)
                 {
-                    m_powerState = pwrStateCur;
-                    LOGINFO("m_powerState:%d", m_powerState);
+                    m_powerState.store(pwrStateCur);
+                    LOGINFO("m_powerState:%d", m_powerState.load());
                 }
 
                 retStatus = _powerManagerPlugin->GetNetworkStandbyMode(nwStandby);
@@ -661,27 +764,40 @@ namespace WPEFramework
 
         void XCastImplementation::threadPowerModeChangeEvent(void)
         {
-            LOGINFO(" threadPowerModeChangeEvent m_standbyBehavior:%d , m_powerState:%d ",m_standbyBehavior,m_powerState);
-            if(m_powerState == WPEFramework::Exchange::IPowerManager::POWER_STATE_ON)
+            const PowerState powerState = m_powerState.load();
+            LOGINFO(" threadPowerModeChangeEvent m_standbyBehavior:%d , m_powerState:%d ",m_standbyBehavior,powerState);
+            if(powerState == WPEFramework::Exchange::IPowerManager::POWER_STATE_ON)
             {
-                if (m_is_restart_req)
+                if (m_is_restart_req.load())
                 {
-                    Deinitialize();
-                    sleep(1);
+                    // Settling delay for the resuming network stack; aborts early if the plugin is
+                    // shutting down instead of blocking the joining thread for the full duration.
+                    if (waitForShutdownOrTimeout(CAST_SERVICE_RESTART_DELAY_IN_MILLIS))
+                    {
+                        LOGWARN("Shutdown requested, skipping cast service restart");
+                        return;
+                    }
+                    if (WPEFramework::Exchange::IPowerManager::POWER_STATE_ON != m_powerState.load())
+                    {
+                        LOGWARN("Power state changed during restart delay, skipping cast service restart");
+                        return;
+                    }
                     Initialize(m_networkStandbyMode);
-                    m_is_restart_req = false;
+                    m_is_restart_req.store(false);
                 }
             }
-            else if (m_powerState == WPEFramework::Exchange::IPowerManager::POWER_STATE_STANDBY_DEEP_SLEEP )
+            else if (powerState == WPEFramework::Exchange::IPowerManager::POWER_STATE_STANDBY_DEEP_SLEEP )
             {
-                m_is_restart_req = true; //After DEEPSLEEP, restart xdial again for next transition.
+                // Normally already done inline from OnPowerModeChanged; idempotent safety net for
+                // the paths that reach deep sleep without that callback.
+                prepareForDeepSleep();
             }
 
             if(m_standbyBehavior == false)
             {
                 bool enabledStatus = false;
-                LOGINFO("m_xcastEnable:[%u] , m_powerState:[%d] ",m_xcastEnable,m_powerState);
-                if(m_xcastEnable && ( m_powerState == WPEFramework::Exchange::IPowerManager::POWER_STATE_ON))
+                LOGINFO("m_xcastEnable:[%u] , m_powerState:[%d] ",m_xcastEnable,powerState);
+                if(m_xcastEnable && ( powerState == WPEFramework::Exchange::IPowerManager::POWER_STATE_ON))
                 {
                     enabledStatus = true;
                 }
@@ -773,6 +889,11 @@ namespace WPEFramework
 
             if (_service == nullptr) {
                 LOGERR("Service is not initialized");
+                return false;
+            }
+
+            if (nullptr == m_xcast_manager) {
+                LOGERR("XCastManager is not initialized");
                 return false;
             }
 
@@ -870,6 +991,12 @@ namespace WPEFramework
             bool status = false;
 
             LOGINFO("Interface[%s]Mapped[%s] Connected[%u] IP[%s]",nwInterface.c_str(),mappedInterface.c_str(),nwConnected,ipaddress.c_str());
+            if (nullptr == m_xcast_manager)
+            {
+                // Cast service is torn down (e.g. deep sleep); do not restart discovery from a network event.
+                LOGINFO("Cast service not running, ignoring connectivity change");
+                return;
+            }
             if(nwConnected)
             {
                 if(mappedInterface.compare("ETHERNET")==0){
@@ -1219,7 +1346,7 @@ namespace WPEFramework
                 registerPowerEventHandlers();
             }
 
-            if (m_xcastEnable && ( (m_standbyBehavior == true) || ((m_standbyBehavior == false)&&(m_powerState == WPEFramework::Exchange::IPowerManager::POWER_STATE_ON))))
+            if (m_xcastEnable && ( (m_standbyBehavior == true) || ((m_standbyBehavior == false)&&(m_powerState.load() == WPEFramework::Exchange::IPowerManager::POWER_STATE_ON))))
             {
                 isEnabled = true;
             }
@@ -1285,7 +1412,7 @@ namespace WPEFramework
             if (!friendlyname.empty())
             {
                 m_friendlyName = friendlyname;
-                if (m_xcastEnable && ( (m_standbyBehavior == true) || ((m_standbyBehavior == false)&&(m_powerState == WPEFramework::Exchange::IPowerManager::POWER_STATE_ON))))
+                if (m_xcastEnable && ( (m_standbyBehavior == true) || ((m_standbyBehavior == false)&&(m_powerState.load() == WPEFramework::Exchange::IPowerManager::POWER_STATE_ON))))
                 {
                     enabledStatus = true;
                 }
@@ -1442,9 +1569,9 @@ namespace WPEFramework
                 m_xcast_manager->registerApplications(m_appConfigCache);
             }
 
-            LOGINFO("m_xcastEnable[%d] m_standbyBehavior[%d] m_powerState[%d]", m_xcastEnable, m_standbyBehavior, m_powerState);
+            LOGINFO("m_xcastEnable[%d] m_standbyBehavior[%d] m_powerState[%d]", m_xcastEnable, m_standbyBehavior, m_powerState.load());
             /*Reenabling cast service after registering Applications*/
-            if (m_xcastEnable && ( (m_standbyBehavior == true) || ((m_standbyBehavior == false)&&(m_powerState == WPEFramework::Exchange::IPowerManager::POWER_STATE_ON))))
+            if (m_xcastEnable && ( (m_standbyBehavior == true) || ((m_standbyBehavior == false)&&(m_powerState.load() == WPEFramework::Exchange::IPowerManager::POWER_STATE_ON))))
             {
                 enableCastService(m_friendlyName,true);
             }
@@ -1484,9 +1611,9 @@ namespace WPEFramework
                 m_xcast_manager->registerApplications(appConfigList);
             }
 
-            LOGINFO("m_xcastEnable[%d] m_standbyBehavior[%d] m_powerState[%d]", m_xcastEnable, m_standbyBehavior, m_powerState);
+            LOGINFO("m_xcastEnable[%d] m_standbyBehavior[%d] m_powerState[%d]", m_xcastEnable, m_standbyBehavior, m_powerState.load());
             /*Reenabling cast service after registering Applications*/
-            if (m_xcastEnable && ( (m_standbyBehavior == true) || ((m_standbyBehavior == false)&&(m_powerState == WPEFramework::Exchange::IPowerManager::POWER_STATE_ON))))
+            if (m_xcastEnable && ( (m_standbyBehavior == true) || ((m_standbyBehavior == false)&&(m_powerState.load() == WPEFramework::Exchange::IPowerManager::POWER_STATE_ON))))
             {
                 enableCastService(m_friendlyName,true);
             }
@@ -1500,7 +1627,7 @@ namespace WPEFramework
 
         bool XCastImplementation::setPowerState(const string &powerState)
         {
-            PowerState cur_powerState = m_powerState,
+            PowerState cur_powerState = m_powerState.load(),
             new_powerState = WPEFramework::Exchange::IPowerManager::POWER_STATE_OFF;
             Core::hresult status = Core::ERROR_GENERAL;
             bool ret = true;
