@@ -167,7 +167,7 @@ protected:
     MockINetworkManager* mockNetworkManager = nullptr;
     PLUGINHOST_DISPATCHER* dispatcher = nullptr;
     Exchange::IPowerManager::INetworkStandbyModeChangedNotification* _networkStandbyModeChangedNotification = nullptr;
-    Exchange::IPowerManager::IModeChangedNotification* _modeChangedNotification = nullptr;
+    Exchange::IPowerManager::IModePreChangeNotification* _modePreChangeNotification = nullptr;
     Exchange::IPowerManager::PowerState _powerState = Exchange::IPowerManager::POWER_STATE_OFF;
     Exchange::INetworkManager::INotification* _networkManagerNotification = nullptr;
     bool _networkStandbyMode = false;
@@ -185,7 +185,7 @@ protected:
 
         // Reset test fixture state for each test
         _networkStandbyModeChangedNotification = nullptr;
-        _modeChangedNotification = nullptr;
+        _modePreChangeNotification = nullptr;
         _powerState = Exchange::IPowerManager::POWER_STATE_OFF;
         _networkManagerNotification = nullptr;
         _networkStandbyMode = false;
@@ -325,13 +325,26 @@ protected:
                     return Core::ERROR_NONE;
                 }));
 
-        EXPECT_CALL(PowerManagerMock::Mock(), Register(::testing::Matcher<Exchange::IPowerManager::IModeChangedNotification*>(::testing::_)))
+        EXPECT_CALL(PowerManagerMock::Mock(), Register(::testing::Matcher<Exchange::IPowerManager::IModePreChangeNotification*>(::testing::_)))
             .Times(::testing::AnyNumber())
             .WillRepeatedly(::testing::Invoke(
-                [&](Exchange::IPowerManager::IModeChangedNotification* notification) -> uint32_t {
-                    _modeChangedNotification = notification;
+                [&](Exchange::IPowerManager::IModePreChangeNotification* notification) -> uint32_t {
+                    _modePreChangeNotification = notification;
                     return Core::ERROR_NONE;
                 }));
+
+        EXPECT_CALL(PowerManagerMock::Mock(), AddPowerModePreChangeClient(::testing::_, ::testing::_))
+            .Times(::testing::AnyNumber())
+            .WillRepeatedly(::testing::Invoke(
+                [&](const string& clientName, uint32_t& clientId) -> uint32_t {
+                    EXPECT_EQ(clientName, string("XCast"));
+                    clientId = 7;
+                    return Core::ERROR_NONE;
+                }));
+
+        EXPECT_CALL(PowerManagerMock::Mock(), DelayPowerModeChangeBy(::testing::_, ::testing::_, ::testing::_))
+            .Times(::testing::AnyNumber())
+            .WillRepeatedly(::testing::Return(Core::ERROR_NONE));
 
         // XCastImplementation::Initialize() now always defers the first GDial connect to the
         // locate-cast timer instead of connecting synchronously. ActivationChanged is always
@@ -924,8 +937,8 @@ TEST_F(XCastTest, updatePowerState)
             [&](const int keyCode, const PowerState powerState, const string& reason) -> uint32_t {
                 EXPECT_EQ(powerState, Exchange::IPowerManager::PowerState::POWER_STATE_STANDBY);
                 _powerState = powerState;
-                if (_modeChangedNotification) {
-                    _modeChangedNotification->OnPowerModeChanged(Exchange::IPowerManager::PowerState::POWER_STATE_ON, powerState);
+                if (_modePreChangeNotification) {
+                    _modePreChangeNotification->OnPowerModePreChange(Exchange::IPowerManager::PowerState::POWER_STATE_ON, powerState, 1, 1);
                 }
                 return Core::ERROR_NONE;
             }))
@@ -933,8 +946,8 @@ TEST_F(XCastTest, updatePowerState)
             [&](const int keyCode, const PowerState powerState, const string& reason) -> uint32_t {
                 EXPECT_EQ(powerState, WPEFramework::Exchange::IPowerManager::POWER_STATE_ON);
                 _powerState = powerState;
-                if (_modeChangedNotification) {
-                    _modeChangedNotification->OnPowerModeChanged(Exchange::IPowerManager::PowerState::POWER_STATE_STANDBY, powerState);
+                if (_modePreChangeNotification) {
+                    _modePreChangeNotification->OnPowerModePreChange(Exchange::IPowerManager::PowerState::POWER_STATE_STANDBY, powerState, 2, 1);
                 }
                 return Core::ERROR_NONE;
             }))
@@ -942,8 +955,8 @@ TEST_F(XCastTest, updatePowerState)
             [&](const int keyCode, const PowerState powerState, const string& reason) -> uint32_t {
                 EXPECT_EQ(powerState, WPEFramework::Exchange::IPowerManager::POWER_STATE_STANDBY);
                 _powerState = powerState;
-                if (_modeChangedNotification) {
-                    _modeChangedNotification->OnPowerModeChanged(Exchange::IPowerManager::PowerState::POWER_STATE_ON, powerState);
+                if (_modePreChangeNotification) {
+                    _modePreChangeNotification->OnPowerModePreChange(Exchange::IPowerManager::PowerState::POWER_STATE_ON, powerState, 3, 1);
                 }
                 return Core::ERROR_NONE;
             }))
@@ -951,8 +964,8 @@ TEST_F(XCastTest, updatePowerState)
             [&](const int keyCode, const PowerState powerState, const string& reason) -> uint32_t {
                 EXPECT_EQ(powerState, WPEFramework::Exchange::IPowerManager::POWER_STATE_ON);
                 _powerState = powerState;
-                if (_modeChangedNotification) {
-                    _modeChangedNotification->OnPowerModeChanged(Exchange::IPowerManager::PowerState::POWER_STATE_STANDBY, powerState);
+                if (_modePreChangeNotification) {
+                    _modePreChangeNotification->OnPowerModePreChange(Exchange::IPowerManager::PowerState::POWER_STATE_STANDBY, powerState, 4, 1);
                 }
                 wg.Done();
                 return Core::ERROR_NONE;
@@ -982,11 +995,11 @@ TEST_F(XCastTest, updatePowerState)
                 return Core::ERROR_NONE;
             }));
 
-    EXPECT_CALL(PowerManagerMock::Mock(), Register(::testing::Matcher<Exchange::IPowerManager::IModeChangedNotification*>(::testing::_)))
+    EXPECT_CALL(PowerManagerMock::Mock(), Register(::testing::Matcher<Exchange::IPowerManager::IModePreChangeNotification*>(::testing::_)))
         .Times(::testing::AnyNumber())
         .WillRepeatedly(::testing::Invoke(
-            [&](Exchange::IPowerManager::IModeChangedNotification* notification) -> uint32_t {
-                _modeChangedNotification = notification;
+            [&](Exchange::IPowerManager::IModePreChangeNotification* notification) -> uint32_t {
+                _modePreChangeNotification = notification;
                 return Core::ERROR_NONE;
             }));
 
@@ -1040,11 +1053,23 @@ TEST_F(XCastTest, onPowerManagerEvents)
                 return Core::ERROR_NONE;
             }));
 
-    EXPECT_CALL(PowerManagerMock::Mock(), Register(::testing::Matcher<Exchange::IPowerManager::IModeChangedNotification*>(::testing::_)))
+    EXPECT_CALL(PowerManagerMock::Mock(), Register(::testing::Matcher<Exchange::IPowerManager::IModePreChangeNotification*>(::testing::_)))
         .Times(::testing::AnyNumber())
         .WillRepeatedly(::testing::Invoke(
-            [&](Exchange::IPowerManager::IModeChangedNotification* notification) -> uint32_t {
-                _modeChangedNotification = notification;
+            [&](Exchange::IPowerManager::IModePreChangeNotification* notification) -> uint32_t {
+                _modePreChangeNotification = notification;
+                return Core::ERROR_NONE;
+            }));
+
+    WaitGroup preChangeWg;
+    preChangeWg.Add();
+    EXPECT_CALL(PowerManagerMock::Mock(), PowerModePreChangeComplete(::testing::_, ::testing::_))
+        .Times(2)
+        .WillRepeatedly(::testing::Invoke(
+            [&](const uint32_t clientId, const int transactionId) -> uint32_t {
+                if (2 == transactionId) {
+                    preChangeWg.Done();
+                }
                 return Core::ERROR_NONE;
             }));
 
@@ -1070,22 +1095,52 @@ TEST_F(XCastTest, onPowerManagerEvents)
     EXPECT_EQ(response, string("{\"enabled\":true,\"success\":true}"));
 
     ASSERT_NE(_networkStandbyModeChangedNotification, nullptr);
-    ASSERT_NE(_modeChangedNotification, nullptr);
+    ASSERT_NE(_modePreChangeNotification, nullptr);
 
+    // Events are processed in order; deep sleep last since it tears down gdial.
     _networkStandbyModeChangedNotification->OnNetworkStandbyModeChanged(true);
-    usleep(50);
-    _modeChangedNotification->OnPowerModeChanged(Exchange::IPowerManager::PowerState::POWER_STATE_STANDBY_DEEP_SLEEP, Exchange::IPowerManager::PowerState::POWER_STATE_ON);
-    usleep(50);
-    _modeChangedNotification->OnPowerModeChanged(Exchange::IPowerManager::PowerState::POWER_STATE_ON,Exchange::IPowerManager::PowerState::POWER_STATE_STANDBY_DEEP_SLEEP);
-    sleep(1);
+    _modePreChangeNotification->OnPowerModePreChange(Exchange::IPowerManager::PowerState::POWER_STATE_STANDBY_DEEP_SLEEP, Exchange::IPowerManager::PowerState::POWER_STATE_ON, 1, 1);
     _networkStandbyModeChangedNotification->OnNetworkStandbyModeChanged(false);
     wg.Wait();
+    _modePreChangeNotification->OnPowerModePreChange(Exchange::IPowerManager::PowerState::POWER_STATE_ON, Exchange::IPowerManager::PowerState::POWER_STATE_STANDBY_DEEP_SLEEP, 2, 1);
+    preChangeWg.Wait();
 
     EXPECT_EQ(Core::ERROR_NONE, mJsonRpcHandler.Invoke(connection, _T("setEnabled"), _T("{\"enabled\": false }"), response));
     EXPECT_EQ(response, string("{\"success\":true}"));
 
     EXPECT_EQ(Core::ERROR_NONE, mJsonRpcHandler.Invoke(connection, _T("getEnabled"), _T("{}"), response));
     EXPECT_EQ(response, string("{\"enabled\":false,\"success\":true}"));
+
+    if (Core::ERROR_NONE == status)
+    {
+        releaseResources();
+    }
+}
+
+TEST_F(XCastTest, onPowerModePreChangeDeepSleep)
+{
+    Core::hresult status = createResources();
+    WaitGroup wg;
+    wg.Add();
+
+    EXPECT_CALL(PowerManagerMock::Mock(), DelayPowerModeChangeBy(7u, 42, ::testing::_))
+        .Times(1)
+        .WillOnce(::testing::Return(Core::ERROR_NONE));
+
+    EXPECT_CALL(PowerManagerMock::Mock(), PowerModePreChangeComplete(::testing::_, ::testing::_))
+        .Times(1)
+        .WillOnce(::testing::Invoke(
+            [&](const uint32_t clientId, const int transactionId) -> uint32_t {
+                EXPECT_EQ(clientId, 7u);
+                EXPECT_EQ(transactionId, 42);
+                wg.Done();
+                return Core::ERROR_NONE;
+            }));
+
+    ASSERT_NE(_modePreChangeNotification, nullptr);
+    _modePreChangeNotification->OnPowerModePreChange(Exchange::IPowerManager::PowerState::POWER_STATE_ON,
+        Exchange::IPowerManager::PowerState::POWER_STATE_STANDBY_DEEP_SLEEP, 42, 10);
+    wg.Wait();
 
     if (Core::ERROR_NONE == status)
     {

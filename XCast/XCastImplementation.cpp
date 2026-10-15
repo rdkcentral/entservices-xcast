@@ -24,6 +24,7 @@
 #include "UtilsIarm.h"
 
 #include "rfcapi.h"
+#include <algorithm>
 #include <string>
 #include <vector>
 
@@ -38,6 +39,16 @@
 #define LOCATE_CAST_SECOND_TIMEOUT_IN_MILLIS 10000  //10 seconds
 
 #define DIAL_MAX_ADDITIONALURL (1024)
+
+#define POWER_PRECHANGE_CLIENT_NAME "XCast"
+/* Initial reservation, sized to cover a normal teardown (timer stop + gdial shutdown). */
+#define DEEP_SLEEP_TEARDOWN_BUDGET_SEC 5
+/* How long before the current reservation expires the monitor checks whether more time is needed. */
+#define DEEP_SLEEP_DELAY_RENEW_MARGIN_SEC 1
+/* Extra time added per extension when teardown is still running. */
+#define DEEP_SLEEP_DELAY_EXTENSION_SEC 2
+/* Upper bound so a hung teardown cannot hold off deep sleep indefinitely. */
+#define DEEP_SLEEP_MAX_DELAY_SEC 30
 
 namespace WPEFramework
 {
@@ -70,13 +81,19 @@ namespace WPEFramework
         static string m_activeInterfaceName = "";
         static bool m_isDynamicRegistrationsRequired = false;
 
-        static bool m_is_restart_req = false;
-
         XCastImplementation::XCastImplementation()
         : _service(nullptr),
         _pwrMgrNotification(*this),
+        m_powerState(WPEFramework::Exchange::IPowerManager::POWER_STATE_STANDBY),
         m_networkStandbyMode(false),
         _registeredPowerEventHandlers(false),
+        _preChangeClientId(0),
+        _preChangeClientAdded(false),
+        _powerEventJobQueued(false),
+        _powerEventsAccepted(false),
+        _castSuspended(false),
+        _delayMonitorDone(true),
+        _delayMonitorTransactionId(0),
         _networkManagerPlugin(nullptr),
         _adminLock(),
         _networkManagerNotification(*this),
@@ -94,6 +111,8 @@ namespace WPEFramework
         XCastImplementation::~XCastImplementation()
         {
             LOGINFO("Call destructor");
+            // A joinable std::thread at destruction calls std::terminate.
+            stopPowerDelayMonitor(0, true);
             XCastImplementation::_instance = nullptr;
             _service = nullptr;
         }
@@ -173,21 +192,15 @@ namespace WPEFramework
         {
             LOGINFO("Entering..!!!");
 
-            // Wait for all active power mode change threads to complete before destroying resources
-            // This prevents race conditions where a thread tries to use destroyed objects
-            int waitCount = 0;
-            while ((powerModeChangeActiveCount.load() > 0) && waitCount < 50) {
-                usleep(100000); // 100ms
-                waitCount++;
-            }
-            if (powerModeChangeActiveCount.load() > 0) {
-                LOGWARN("Power mode change thread still active after waiting, proceeding with cleanup");
-            }
+            // Must run before taking m_TimerMutexSync: an in-flight power handler may be waiting on it.
+            stopPowerEventProcessing();
+            stopPowerDelayMonitor(0, true);
+
+            lock_guard<mutex> timerLck(m_TimerMutexSync);
 
             // Unregister all event listeners before tearing down m_xcast_manager/plugin interfaces so
             // no new notification can race with the teardown below. An AppManager callback already
             // in flight is additionally serialized via _appManagerCallbackLock.
-            unregisterPowerEventHandlers();
             unregisterNetworkEventHandlers();
             unregisterSystemEventHandlers();
             {
@@ -201,8 +214,12 @@ namespace WPEFramework
                 m_xcast_manager->shutdown();
                 m_xcast_manager = nullptr;
             }
-            if (_powerManagerPlugin) {
-                _powerManagerPlugin.Reset();
+            _castSuspended = false;
+            {
+                lock_guard<mutex> lck(_powerManagerLock);
+                if (_powerManagerPlugin) {
+                    _powerManagerPlugin.Reset();
+                }
             }
             if (_networkManagerPlugin) {
                 _networkManagerPlugin->Release();
@@ -350,7 +367,6 @@ namespace WPEFramework
             }
             else if ((_service) && ( nullptr == service ))
             {
-                lock_guard<mutex> lck(m_TimerMutexSync);
                 LOGINFO("Call deinitialise()");
                 Deinitialize();
                 _service->Release();
@@ -403,25 +419,41 @@ namespace WPEFramework
         {
             ASSERT (_powerManagerPlugin);
             if(!_registeredPowerEventHandlers && _powerManagerPlugin) {
+                {
+                    lock_guard<mutex> lck(_powerEventQueueLock);
+                    _powerEventsAccepted = true;
+                }
                 const Core::hresult networkStandbyStatus = _powerManagerPlugin->Register(
                     _pwrMgrNotification.baseInterface<Exchange::IPowerManager::INetworkStandbyModeChangedNotification>());
-                const Core::hresult powerModeStatus = _powerManagerPlugin->Register(
-                    _pwrMgrNotification.baseInterface<Exchange::IPowerManager::IModeChangedNotification>());
+                const Core::hresult preChangeStatus = _powerManagerPlugin->Register(
+                    _pwrMgrNotification.baseInterface<Exchange::IPowerManager::IModePreChangeNotification>());
 
-                if ((Core::ERROR_NONE == networkStandbyStatus) && (Core::ERROR_NONE == powerModeStatus)) {
+                if ((Core::ERROR_NONE == networkStandbyStatus) && (Core::ERROR_NONE == preChangeStatus)) {
                     LOGINFO("PowerManager event notifications registered");
                     _registeredPowerEventHandlers = true;
+
+                    uint32_t clientId = 0;
+                    const Core::hresult addStatus = _powerManagerPlugin->AddPowerModePreChangeClient(POWER_PRECHANGE_CLIENT_NAME, clientId);
+                    if (Core::ERROR_NONE == addStatus) {
+                        lock_guard<mutex> lck(_powerManagerLock);
+                        _preChangeClientId = clientId;
+                        _preChangeClientAdded = true;
+                        LOGINFO("Added as PowerModePreChange client, clientId[%u]", clientId);
+                    }
+                    else {
+                        LOGERR("AddPowerModePreChangeClient failed [%x]", addStatus);
+                    }
                 }
                 else {
-                    LOGERR("Failed to register PowerManager event notifications: network standby[%x], power mode[%x]",
-                        networkStandbyStatus, powerModeStatus);
+                    LOGERR("Failed to register PowerManager event notifications: network standby[%x], power mode pre-change[%x]",
+                        networkStandbyStatus, preChangeStatus);
                     if (Core::ERROR_NONE == networkStandbyStatus) {
                         _powerManagerPlugin->Unregister(
                             _pwrMgrNotification.baseInterface<Exchange::IPowerManager::INetworkStandbyModeChangedNotification>());
                     }
-                    if (Core::ERROR_NONE == powerModeStatus) {
+                    if (Core::ERROR_NONE == preChangeStatus) {
                         _powerManagerPlugin->Unregister(
-                            _pwrMgrNotification.baseInterface<Exchange::IPowerManager::IModeChangedNotification>());
+                            _pwrMgrNotification.baseInterface<Exchange::IPowerManager::IModePreChangeNotification>());
                     }
                 }
             }
@@ -431,10 +463,20 @@ namespace WPEFramework
         {
             ASSERT (_powerManagerPlugin);
             if (_registeredPowerEventHandlers && _powerManagerPlugin) {
+                // PowerManager requires the pre-change client to be removed before unregistering the notification.
+                {
+                    lock_guard<mutex> lck(_powerManagerLock);
+                    if (_preChangeClientAdded) {
+                        _powerManagerPlugin->RemovePowerModePreChangeClient(_preChangeClientId);
+                        _preChangeClientAdded = false;
+                        LOGINFO("PowerModePreChange client removed");
+                    }
+                }
+                // Unregister outside _powerManagerLock: it waits for an in-flight callback that may need the lock.
+                _powerManagerPlugin->Unregister(_pwrMgrNotification.baseInterface<Exchange::IPowerManager::IModePreChangeNotification>());
+                LOGINFO("IModePreChangeNotification event unregistered");
                 _powerManagerPlugin->Unregister(_pwrMgrNotification.baseInterface<Exchange::IPowerManager::INetworkStandbyModeChangedNotification>());
                 LOGINFO("INetworkStandbyModeChangedNotification event unregistered");
-                _powerManagerPlugin->Unregister(_pwrMgrNotification.baseInterface<Exchange::IPowerManager::IModeChangedNotification>());
-                LOGINFO("IModeChangedNotification event unregistered");
                 _registeredPowerEventHandlers = false;
             }
         }
@@ -647,52 +689,236 @@ namespace WPEFramework
                 if (Core::ERROR_NONE == retStatus)
                 {
                     m_powerState = pwrStateCur;
-                    LOGINFO("m_powerState:%d", m_powerState);
+                    LOGINFO("m_powerState:%d", pwrStateCur);
                 }
 
                 retStatus = _powerManagerPlugin->GetNetworkStandbyMode(nwStandby);
                 if (Core::ERROR_NONE == retStatus)
                 {
                     m_networkStandbyMode = nwStandby;
-                    LOGINFO("m_networkStandbyMode:%u ",m_networkStandbyMode);
+                    LOGINFO("m_networkStandbyMode:%u ",nwStandby);
                 }
             }
         }
 
-        void XCastImplementation::threadPowerModeChangeEvent(void)
+        bool XCastImplementation::enqueuePowerEvent(const PowerEvent& event)
         {
-            LOGINFO(" threadPowerModeChangeEvent m_standbyBehavior:%d , m_powerState:%d ",m_standbyBehavior,m_powerState);
-            if(m_powerState == WPEFramework::Exchange::IPowerManager::POWER_STATE_ON)
+            bool submitJob = false;
             {
-                if (m_is_restart_req)
+                lock_guard<mutex> lck(_powerEventQueueLock);
+                if (!_powerEventsAccepted)
                 {
-                    Deinitialize();
-                    sleep(1);
-                    Initialize(m_networkStandbyMode);
-                    m_is_restart_req = false;
+                    LOGWARN("Power event type[%d] dropped, power event processing stopped", event.type);
+                    return false;
+                }
+                _powerEventQueue.push_back(event);
+                if (!_powerEventJobQueued)
+                {
+                    _powerEventJobQueued = true;
+                    submitJob = true;
                 }
             }
-            else if (m_powerState == WPEFramework::Exchange::IPowerManager::POWER_STATE_STANDBY_DEEP_SLEEP )
+            if (submitJob)
             {
-                m_is_restart_req = true; //After DEEPSLEEP, restart xdial again for next transition.
+                Core::IWorkerPool::Instance().Submit(Job::Create(this, PROCESS_POWER_EVENTS, "", JsonObject()));
+            }
+            return true;
+        }
+
+        void XCastImplementation::processPowerEvents()
+        {
+            while (true)
+            {
+                lock_guard<mutex> handlerLck(_powerEventHandlerLock);
+                PowerEvent event;
+                {
+                    lock_guard<mutex> lck(_powerEventQueueLock);
+                    if (_powerEventQueue.empty())
+                    {
+                        _powerEventJobQueued = false;
+                        return;
+                    }
+                    event = _powerEventQueue.front();
+                    _powerEventQueue.pop_front();
+                }
+
+                switch (event.type)
+                {
+                    case PowerEvent::PRE_CHANGE:
+                        handlePowerModePreChange(event);
+                        break;
+                    case PowerEvent::NETWORK_STANDBY_CHANGED:
+                        LOGINFO("networkStandbyMode:%u ", event.networkStandbyMode);
+                        m_networkStandbyMode = event.networkStandbyMode;
+                        SetNetworkStandbyMode(event.networkStandbyMode);
+                        break;
+                }
+            }
+        }
+
+        void XCastImplementation::handlePowerModePreChange(const PowerEvent& event)
+        {
+            LOGINFO("[%d] -- > [%d] transactionId[%d] m_standbyBehavior:%d", event.currentState, event.newState, event.transactionId, m_standbyBehavior);
+            if ((WPEFramework::Exchange::IPowerManager::POWER_STATE_STANDBY_DEEP_SLEEP == event.newState) ||
+                (WPEFramework::Exchange::IPowerManager::POWER_STATE_OFF == event.newState))
+            {
+                suspendCastService();
+            }
+            else if (_castSuspended.exchange(false))
+            {
+                // Timer retries until the network is back, so no fixed post-resume delay is needed.
+                LOGINFO("Restarting cast service after deep sleep");
+                startTimer(LOCATE_CAST_FIRST_TIMEOUT_IN_MILLIS);
             }
 
-            if(m_standbyBehavior == false)
+            if (m_standbyBehavior == false)
             {
                 bool enabledStatus = false;
-                LOGINFO("m_xcastEnable:[%u] , m_powerState:[%d] ",m_xcastEnable,m_powerState);
-                if(m_xcastEnable && ( m_powerState == WPEFramework::Exchange::IPowerManager::POWER_STATE_ON))
+                LOGINFO("m_xcastEnable:[%u] , newState:[%d] ", m_xcastEnable, event.newState);
+                if (m_xcastEnable && (WPEFramework::Exchange::IPowerManager::POWER_STATE_ON == event.newState))
                 {
                     enabledStatus = true;
                 }
                 enableCastService(m_friendlyName, enabledStatus);
             }
+
+            stopPowerDelayMonitor(event.transactionId);
+            lock_guard<mutex> lck(_powerManagerLock);
+            if (_preChangeClientAdded && _powerManagerPlugin)
+            {
+                const Core::hresult status = _powerManagerPlugin->PowerModePreChangeComplete(_preChangeClientId, event.transactionId);
+                if (Core::ERROR_NONE != status)
+                {
+                    LOGERR("PowerModePreChangeComplete failed transactionId[%d] [%x]", event.transactionId, status);
+                }
+                else
+                {
+                    LOGINFO("PowerModePreChangeComplete sent transactionId[%d]", event.transactionId);
+                }
+            }
         }
 
-        void XCastImplementation::networkStandbyModeChangeEvent(void)
+        void XCastImplementation::onPowerModePreChange(const PowerState currentState, const PowerState newState, const int transactionId)
         {
-            LOGINFO("m_networkStandbyMode:%u ",m_networkStandbyMode);
-            SetNetworkStandbyMode(m_networkStandbyMode);
+            m_powerState = newState;
+            const bool isTeardown = ((WPEFramework::Exchange::IPowerManager::POWER_STATE_STANDBY_DEEP_SLEEP == newState) ||
+                                     (WPEFramework::Exchange::IPowerManager::POWER_STATE_OFF == newState));
+            if (isTeardown)
+            {
+                // Reserve time before queueing teardown; the monitor only extends it if teardown overruns.
+                requestPowerModeChangeDelay(transactionId, DEEP_SLEEP_TEARDOWN_BUDGET_SEC);
+                startPowerDelayMonitor(transactionId);
+            }
+
+            PowerEvent event;
+            event.type = PowerEvent::PRE_CHANGE;
+            event.currentState = currentState;
+            event.newState = newState;
+            event.transactionId = transactionId;
+            if (!enqueuePowerEvent(event) && isTeardown)
+            {
+                stopPowerDelayMonitor(transactionId);
+            }
+        }
+
+        void XCastImplementation::requestPowerModeChangeDelay(int transactionId, int delaySec)
+        {
+            lock_guard<mutex> lck(_powerManagerLock);
+            if (_powerManagerPlugin && _preChangeClientAdded)
+            {
+                const Core::hresult status = _powerManagerPlugin->DelayPowerModeChangeBy(_preChangeClientId, transactionId, delaySec);
+                if (Core::ERROR_NONE != status)
+                {
+                    LOGERR("DelayPowerModeChangeBy failed transactionId[%d] [%x]", transactionId, status);
+                }
+                else
+                {
+                    LOGINFO("DelayPowerModeChangeBy [%d]s requested transactionId[%d]", delaySec, transactionId);
+                }
+            }
+        }
+
+        void XCastImplementation::startPowerDelayMonitor(int transactionId)
+        {
+            lock_guard<mutex> ctrl(_delayMonitorCtrlLock);
+            if (_delayMonitorThread.joinable())
+            {
+                {
+                    lock_guard<mutex> lk(_delayMonitorLock);
+                    _delayMonitorDone = true;
+                }
+                _delayMonitorCv.notify_all();
+                _delayMonitorThread.join();
+            }
+            {
+                lock_guard<mutex> lk(_delayMonitorLock);
+                _delayMonitorDone = false;
+            }
+            _delayMonitorTransactionId = transactionId;
+            _delayMonitorThread = std::thread(&XCastImplementation::powerDelayMonitor, this, transactionId);
+        }
+
+        void XCastImplementation::stopPowerDelayMonitor(int transactionId, bool force)
+        {
+            lock_guard<mutex> ctrl(_delayMonitorCtrlLock);
+            if (!_delayMonitorThread.joinable() || (!force && (transactionId != _delayMonitorTransactionId)))
+            {
+                return;
+            }
+            {
+                lock_guard<mutex> lk(_delayMonitorLock);
+                _delayMonitorDone = true;
+            }
+            _delayMonitorCv.notify_all();
+            _delayMonitorThread.join();
+        }
+
+        void XCastImplementation::powerDelayMonitor(int transactionId)
+        {
+            const auto start = std::chrono::steady_clock::now();
+            int reservedSec = DEEP_SLEEP_TEARDOWN_BUDGET_SEC;
+            unique_lock<mutex> lk(_delayMonitorLock);
+            // Wake only just before the current reservation expires, so a fast teardown never requests an extension.
+            while (!_delayMonitorCv.wait_until(lk, start + std::chrono::seconds(reservedSec - DEEP_SLEEP_DELAY_RENEW_MARGIN_SEC), [this] { return _delayMonitorDone; }))
+            {
+                if (reservedSec >= DEEP_SLEEP_MAX_DELAY_SEC)
+                {
+                    LOGERR("Teardown exceeded [%d]s, no further delay requested transactionId[%d]", DEEP_SLEEP_MAX_DELAY_SEC, transactionId);
+                    break;
+                }
+                const int extensionSec = std::min(DEEP_SLEEP_DELAY_EXTENSION_SEC, DEEP_SLEEP_MAX_DELAY_SEC - reservedSec);
+                LOGWARN("Teardown still in progress after [%d]s, extending by [%d]s transactionId[%d]",
+                        reservedSec - DEEP_SLEEP_DELAY_RENEW_MARGIN_SEC, extensionSec, transactionId);
+                lk.unlock();
+                // The delay is measured from now, so include the margin still left on the current reservation.
+                requestPowerModeChangeDelay(transactionId, DEEP_SLEEP_DELAY_RENEW_MARGIN_SEC + extensionSec);
+                lk.lock();
+                reservedSec += extensionSec;
+            }
+        }
+
+        void XCastImplementation::suspendCastService()
+        {
+            LOGINFO("Stopping cast service ahead of deep sleep / off");
+            _castSuspended = true;
+            stopTimer();
+            lock_guard<mutex> lck(m_TimerMutexSync);
+            if (nullptr != m_xcast_manager)
+            {
+                m_xcast_manager->deinitialize();
+            }
+        }
+
+        void XCastImplementation::stopPowerEventProcessing()
+        {
+            unregisterPowerEventHandlers();
+            {
+                lock_guard<mutex> lck(_powerEventQueueLock);
+                _powerEventsAccepted = false;
+                _powerEventQueue.clear();
+            }
+            // Wait for any in-flight power event handler to finish.
+            lock_guard<mutex> handlerLck(_powerEventHandlerLock);
         }
 
         void XCastImplementation::onXcastApplicationLaunchRequestWithParam (string appName, string strPayLoad, string strQuery, string strAddDataUrl)
@@ -912,6 +1138,12 @@ namespace WPEFramework
             LOGINFO("Timer Entrying ...");
             {
                 lock_guard<mutex> lck(m_TimerMutexSync);
+                if (_castSuspended)
+                {
+                    LOGINFO("Cast service suspended for deep sleep, not connecting");
+                    stopTimer();
+                    return;
+                }
                 if( false == connectToGDialService())
                 {
                     LOGINFO("Retry after 10 sec...");
@@ -982,6 +1214,12 @@ namespace WPEFramework
 
         void XCastImplementation::Dispatch(Event event, string callsign, const JsonObject params)
         {
+            if (PROCESS_POWER_EVENTS == event)
+            {
+                processPowerEvents();
+                return;
+            }
+
             _adminLock.Lock();
 
             LOGINFO("Event[%d] callsign[%s]", event, callsign.c_str());
@@ -1442,7 +1680,7 @@ namespace WPEFramework
                 m_xcast_manager->registerApplications(m_appConfigCache);
             }
 
-            LOGINFO("m_xcastEnable[%d] m_standbyBehavior[%d] m_powerState[%d]", m_xcastEnable, m_standbyBehavior, m_powerState);
+            LOGINFO("m_xcastEnable[%d] m_standbyBehavior[%d] m_powerState[%d]", m_xcastEnable, m_standbyBehavior, m_powerState.load());
             /*Reenabling cast service after registering Applications*/
             if (m_xcastEnable && ( (m_standbyBehavior == true) || ((m_standbyBehavior == false)&&(m_powerState == WPEFramework::Exchange::IPowerManager::POWER_STATE_ON))))
             {
@@ -1484,7 +1722,7 @@ namespace WPEFramework
                 m_xcast_manager->registerApplications(appConfigList);
             }
 
-            LOGINFO("m_xcastEnable[%d] m_standbyBehavior[%d] m_powerState[%d]", m_xcastEnable, m_standbyBehavior, m_powerState);
+            LOGINFO("m_xcastEnable[%d] m_standbyBehavior[%d] m_powerState[%d]", m_xcastEnable, m_standbyBehavior, m_powerState.load());
             /*Reenabling cast service after registering Applications*/
             if (m_xcastEnable && ( (m_standbyBehavior == true) || ((m_standbyBehavior == false)&&(m_powerState == WPEFramework::Exchange::IPowerManager::POWER_STATE_ON))))
             {
