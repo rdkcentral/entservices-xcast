@@ -355,7 +355,6 @@ namespace WPEFramework
             bool enqueuePowerEvent(const PowerEvent& event);
             void processPowerEvents();
             void handlePowerModePreChange(const PowerEvent& event);
-            void suspendCastService();
             void stopPowerEventProcessing();
             void requestPowerModeChangeDelay(int transactionId, int delaySec);
             void startPowerDelayMonitor(int transactionId);

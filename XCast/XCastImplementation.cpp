@@ -762,7 +762,14 @@ namespace WPEFramework
             if ((WPEFramework::Exchange::IPowerManager::POWER_STATE_STANDBY_DEEP_SLEEP == event.newState) ||
                 (WPEFramework::Exchange::IPowerManager::POWER_STATE_OFF == event.newState))
             {
-                suspendCastService();
+                LOGINFO("Stopping cast service ahead of deep sleep / off");
+                _castSuspended = true;
+                stopTimer();
+                lock_guard<mutex> timerLck(m_TimerMutexSync);
+                if (nullptr != m_xcast_manager)
+                {
+                    m_xcast_manager->deinitialize();
+                }
             }
             else if (_castSuspended.exchange(false))
             {
@@ -894,18 +901,6 @@ namespace WPEFramework
                 requestPowerModeChangeDelay(transactionId, DEEP_SLEEP_DELAY_RENEW_MARGIN_SEC + extensionSec);
                 lk.lock();
                 reservedSec += extensionSec;
-            }
-        }
-
-        void XCastImplementation::suspendCastService()
-        {
-            LOGINFO("Stopping cast service ahead of deep sleep / off");
-            _castSuspended = true;
-            stopTimer();
-            lock_guard<mutex> lck(m_TimerMutexSync);
-            if (nullptr != m_xcast_manager)
-            {
-                m_xcast_manager->deinitialize();
             }
         }
 
