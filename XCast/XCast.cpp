@@ -23,7 +23,7 @@
 #define API_VERSION_NUMBER_MINOR 0
 #define API_VERSION_NUMBER_PATCH 0
 
-namespace WPEFramework
+namespace Thunder
 {
     namespace {
         static Plugin::Metadata<Plugin::XCast> metadata(
@@ -90,7 +90,7 @@ namespace WPEFramework
                         LOGINFO("XCastImpl Initialise() successfully");
                         // Register for notifications
                         _xcast->Register(&_xcastNotification);
-                        // Invoking Plugin API register to wpeframework
+                        // Invoking Plugin API register to thunder
                         Exchange::JXCast::Register(*this, _xcast);
                         m_notificationRegistered = true;
                     }
@@ -188,4 +188,4 @@ namespace WPEFramework
             }
         }
     } // namespace Plugin
-} // namespace WPEFramework
+} // namespace Thunder

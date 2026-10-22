@@ -32,7 +32,7 @@
 using namespace std;
 
 // Forward declaration
-namespace WPEFramework {
+namespace Thunder {
     namespace PluginHost {
         class IShell;
     }
@@ -50,7 +50,7 @@ public:
     /**
      * Initialize gdialService to communication with gdial server
      */
-    bool initialize(WPEFramework::PluginHost::IShell* pluginService, const std::string& gdial_interface_name, bool networkStandbyMode );
+    bool initialize(Thunder::PluginHost::IShell* pluginService, const std::string& gdial_interface_name, bool networkStandbyMode );
     void deinitialize();
 
     /** Shutdown gdialService connectivity */
@@ -107,7 +107,7 @@ private:
 
     void getWiFiInterface(std::string& WiFiInterfaceName);
     void getGDialInterfaceName(std::string& interfaceName);
-    std::string getReceiverID(WPEFramework::PluginHost::IShell* pluginService);
+    std::string getReceiverID(Thunder::PluginHost::IShell* pluginService);
     bool envGetValue(const char *key, std::string &value);
     /**
      * Retrieves the device serial number from the deviceInfo plugin using on-demand acquisition.
@@ -115,7 +115,7 @@ private:
      * @param serialNumber [out] Contains serial number string on success.
      * @return true if the serial number was successfully retrieved, false otherwise.
      */
-    bool getSerialNumberFromDeviceInfo(WPEFramework::PluginHost::IShell* pluginService, std::string& serialNumber);
+    bool getSerialNumberFromDeviceInfo(Thunder::PluginHost::IShell* pluginService, std::string& serialNumber);
 
     /**
      * Generates a UUID version 5 using the DNS namespace and SHA-1 hashing according to RFC 4122,

@@ -44,13 +44,13 @@
 #define SYSTEM_CALLSIGN_VER SYSTEM_CALLSIGN".1"
 #define SECURITY_TOKEN_LEN_MAX 1024
 
-using PowerState = WPEFramework::Exchange::IPowerManager::PowerState;
+using PowerState = Thunder::Exchange::IPowerManager::PowerState;
 
-namespace WPEFramework
+namespace Thunder
 {
     namespace Plugin
     {
-        WPEFramework::Exchange::IPowerManager::PowerState m_powerState = WPEFramework::Exchange::IPowerManager::POWER_STATE_STANDBY;
+        Thunder::Exchange::IPowerManager::PowerState m_powerState = Thunder::Exchange::IPowerManager::POWER_STATE_STANDBY;
         class XCastImplementation : public Exchange::IXCast,public Exchange::IConfiguration, public XCastNotifier 
         {
          public:
@@ -268,7 +268,7 @@ namespace WPEFramework
             static XCastManager* m_xcast_manager;
             TpTimer m_locateCastTimer;
             
-            WPEFramework::JSONRPC::LinkType<WPEFramework::Core::JSON::IElement> *m_SystemPluginObj = NULL;
+            Thunder::JSONRPC::LinkType<Thunder::Core::JSON::IElement> *m_SystemPluginObj = NULL;
             PluginHost::IShell* _service;
 
             PowerManagerInterfaceRef _powerManagerPlugin;
@@ -340,4 +340,4 @@ namespace WPEFramework
             friend class Job;
         };
     } // namespace Plugin
-} // namespace WPEFramework
+} // namespace Thunder

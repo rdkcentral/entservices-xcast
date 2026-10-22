@@ -39,7 +39,7 @@
 
 #define DIAL_MAX_ADDITIONALURL (1024)
 
-namespace WPEFramework
+namespace Thunder
 {
     namespace Plugin
     {
@@ -221,7 +221,7 @@ namespace WPEFramework
         {
             if (nullptr == _systemServicesPlugin)
             {
-                _systemServicesPlugin = service->QueryInterfaceByCallsign<WPEFramework::Exchange::ISystemServices>("org.rdk.System");
+                _systemServicesPlugin = service->QueryInterfaceByCallsign<Thunder::Exchange::ISystemServices>("org.rdk.System");
                 if (_systemServicesPlugin != nullptr)
                 {
                     registerSystemEventHandlers();
@@ -283,7 +283,7 @@ namespace WPEFramework
         void XCastImplementation::threadSystemFriendlyNameChangeEvent(void)
         {
             bool enabledStatus = false;
-            if (m_xcastEnable && ( (m_standbyBehavior == true) || ((m_standbyBehavior == false)&&(m_powerState == WPEFramework::Exchange::IPowerManager::POWER_STATE_ON))))
+            if (m_xcastEnable && ( (m_standbyBehavior == true) || ((m_standbyBehavior == false)&&(m_powerState == Thunder::Exchange::IPowerManager::POWER_STATE_ON))))
             {
                 enabledStatus = true;
             }
@@ -346,7 +346,7 @@ namespace WPEFramework
         {
             if (nullptr == _networkManagerPlugin)
             {
-                _networkManagerPlugin = service->QueryInterfaceByCallsign<WPEFramework::Exchange::INetworkManager>("org.rdk.NetworkManager");
+                _networkManagerPlugin = service->QueryInterfaceByCallsign<Thunder::Exchange::INetworkManager>("org.rdk.NetworkManager");
                 if (_networkManagerPlugin != nullptr)
                 {
                     registerNetworkEventHandlers();
@@ -437,8 +437,8 @@ namespace WPEFramework
         void XCastImplementation::checkPowerAndNetworkStandbyStates()
         {
             Core::hresult retStatus = Core::ERROR_GENERAL;
-            PowerState pwrStateCur = WPEFramework::Exchange::IPowerManager::POWER_STATE_UNKNOWN;
-            PowerState pwrStatePrev = WPEFramework::Exchange::IPowerManager::POWER_STATE_UNKNOWN;
+            PowerState pwrStateCur = Thunder::Exchange::IPowerManager::POWER_STATE_UNKNOWN;
+            PowerState pwrStatePrev = Thunder::Exchange::IPowerManager::POWER_STATE_UNKNOWN;
             bool nwStandby = false;
 
             ASSERT (_powerManagerPlugin);
@@ -463,7 +463,7 @@ namespace WPEFramework
         {
             powerModeChangeActive = true;
             LOGINFO(" threadPowerModeChangeEvent m_standbyBehavior:%d , m_powerState:%d ",m_standbyBehavior,m_powerState);
-            if(m_powerState == WPEFramework::Exchange::IPowerManager::POWER_STATE_ON)
+            if(m_powerState == Thunder::Exchange::IPowerManager::POWER_STATE_ON)
             {
                 if (m_is_restart_req)
                 {
@@ -473,7 +473,7 @@ namespace WPEFramework
                     m_is_restart_req = false;
                 }
             }
-            else if (m_powerState == WPEFramework::Exchange::IPowerManager::POWER_STATE_STANDBY_DEEP_SLEEP )
+            else if (m_powerState == Thunder::Exchange::IPowerManager::POWER_STATE_STANDBY_DEEP_SLEEP )
             {
                 m_is_restart_req = true; //After DEEPSLEEP, restart xdial again for next transition.
             }
@@ -482,7 +482,7 @@ namespace WPEFramework
             {
                 bool enabledStatus = false;
                 LOGINFO("m_xcastEnable:[%u] , m_powerState:[%d] ",m_xcastEnable,m_powerState);
-                if(m_xcastEnable && ( m_powerState == WPEFramework::Exchange::IPowerManager::POWER_STATE_ON))
+                if(m_xcastEnable && ( m_powerState == Thunder::Exchange::IPowerManager::POWER_STATE_ON))
                 {
                     enabledStatus = true;
                 }
@@ -1011,7 +1011,7 @@ namespace WPEFramework
                 checkPowerAndNetworkStandbyStates();
             }
 
-            if (m_xcastEnable && ( (m_standbyBehavior == true) || ((m_standbyBehavior == false)&&(m_powerState == WPEFramework::Exchange::IPowerManager::POWER_STATE_ON))))
+            if (m_xcastEnable && ( (m_standbyBehavior == true) || ((m_standbyBehavior == false)&&(m_powerState == Thunder::Exchange::IPowerManager::POWER_STATE_ON))))
             {
                 isEnabled = true;
                 registerPowerEventHandlers();
@@ -1082,7 +1082,7 @@ namespace WPEFramework
             if (!friendlyname.empty())
             {
                 m_friendlyName = friendlyname;
-                if (m_xcastEnable && ( (m_standbyBehavior == true) || ((m_standbyBehavior == false)&&(m_powerState == WPEFramework::Exchange::IPowerManager::POWER_STATE_ON))))
+                if (m_xcastEnable && ( (m_standbyBehavior == true) || ((m_standbyBehavior == false)&&(m_powerState == Thunder::Exchange::IPowerManager::POWER_STATE_ON))))
                 {
                     enabledStatus = true;
                 }
@@ -1236,7 +1236,7 @@ namespace WPEFramework
 
             LOGINFO("m_xcastEnable[%d] m_standbyBehavior[%d] m_powerState[%d]", m_xcastEnable, m_standbyBehavior, m_powerState);
             /*Reenabling cast service after registering Applications*/
-            if (m_xcastEnable && ( (m_standbyBehavior == true) || ((m_standbyBehavior == false)&&(m_powerState == WPEFramework::Exchange::IPowerManager::POWER_STATE_ON))))
+            if (m_xcastEnable && ( (m_standbyBehavior == true) || ((m_standbyBehavior == false)&&(m_powerState == Thunder::Exchange::IPowerManager::POWER_STATE_ON))))
             {
                 enableCastService(m_friendlyName,true);
             }
@@ -1278,7 +1278,7 @@ namespace WPEFramework
 
             LOGINFO("m_xcastEnable[%d] m_standbyBehavior[%d] m_powerState[%d]", m_xcastEnable, m_standbyBehavior, m_powerState);
             /*Reenabling cast service after registering Applications*/
-            if (m_xcastEnable && ( (m_standbyBehavior == true) || ((m_standbyBehavior == false)&&(m_powerState == WPEFramework::Exchange::IPowerManager::POWER_STATE_ON))))
+            if (m_xcastEnable && ( (m_standbyBehavior == true) || ((m_standbyBehavior == false)&&(m_powerState == Thunder::Exchange::IPowerManager::POWER_STATE_ON))))
             {
                 enableCastService(m_friendlyName,true);
             }
@@ -1293,24 +1293,24 @@ namespace WPEFramework
         bool XCastImplementation::setPowerState(const string &powerState)
         {
             PowerState cur_powerState = m_powerState,
-            new_powerState = WPEFramework::Exchange::IPowerManager::POWER_STATE_OFF;
+            new_powerState = Thunder::Exchange::IPowerManager::POWER_STATE_OFF;
             Core::hresult status = Core::ERROR_GENERAL;
             bool ret = true;
             LOGINFO("PowerState[%s]",powerState.c_str());
             if ("ON" == powerState )
             {
-                new_powerState = WPEFramework::Exchange::IPowerManager::POWER_STATE_ON;
+                new_powerState = Thunder::Exchange::IPowerManager::POWER_STATE_ON;
             }
             else if ("STANDBY" == powerState)
             {
-                new_powerState = WPEFramework::Exchange::IPowerManager::POWER_STATE_STANDBY;
+                new_powerState = Thunder::Exchange::IPowerManager::POWER_STATE_STANDBY;
             }
             else if ("TOGGLE" == powerState)
             {
-                new_powerState = ( WPEFramework::Exchange::IPowerManager::POWER_STATE_ON == cur_powerState ) ? WPEFramework::Exchange::IPowerManager::POWER_STATE_STANDBY : WPEFramework::Exchange::IPowerManager::POWER_STATE_ON;
+                new_powerState = ( Thunder::Exchange::IPowerManager::POWER_STATE_ON == cur_powerState ) ? Thunder::Exchange::IPowerManager::POWER_STATE_STANDBY : Thunder::Exchange::IPowerManager::POWER_STATE_ON;
             }
 
-            if ((WPEFramework::Exchange::IPowerManager::POWER_STATE_OFF != new_powerState) && (cur_powerState != new_powerState))
+            if ((Thunder::Exchange::IPowerManager::POWER_STATE_OFF != new_powerState) && (cur_powerState != new_powerState))
             {
                 ASSERT (_powerManagerPlugin);
 
@@ -1332,4 +1332,4 @@ namespace WPEFramework
             return ret;
         }
     } // namespace Plugin
-} // namespace WPEFramework
+} // namespace Thunder

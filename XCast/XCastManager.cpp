@@ -27,7 +27,7 @@
 #include <iomanip>
 
 using namespace std;
-using namespace WPEFramework;
+using namespace Thunder;
 
 #define COMMON_DEVICE_PROPERTIES_FILE   "/etc/device.properties"
 
@@ -112,7 +112,7 @@ XCastManager::~XCastManager()
     m_observer = nullptr;
 }
 
-bool XCastManager::initialize(WPEFramework::PluginHost::IShell* pluginService, const std::string& gdial_interface_name, bool networkStandbyMode )
+bool XCastManager::initialize(Thunder::PluginHost::IShell* pluginService, const std::string& gdial_interface_name, bool networkStandbyMode )
 {
     std::vector<std::string> gdial_args;
     bool returnValue = false,
@@ -295,7 +295,7 @@ void XCastManager::shutdown()
     }
 }
 
-std::string XCastManager::getReceiverID(WPEFramework::PluginHost::IShell* pluginService)
+std::string XCastManager::getReceiverID(Thunder::PluginHost::IShell* pluginService)
 {
     std::ifstream file("/tmp/gpid.txt");
     std::string line, gpidValue, receiverId = "";
@@ -594,20 +594,20 @@ XCastManager * XCastManager::getInstance()
     return XCastManager::_instance;
 }
 
-bool XCastManager::getSerialNumberFromDeviceInfo(WPEFramework::PluginHost::IShell* pluginService, std::string& serialNumber)
+bool XCastManager::getSerialNumberFromDeviceInfo(Thunder::PluginHost::IShell* pluginService, std::string& serialNumber)
 {
     if (pluginService == nullptr) {
         LOGERR("Plugin service is null; cannot call DeviceInfo.");
         return false;
     }
 
-    auto deviceInfoPlugin = pluginService->QueryInterfaceByCallsign<WPEFramework::Exchange::IDeviceInfo>("DeviceInfo");
+    auto deviceInfoPlugin = pluginService->QueryInterfaceByCallsign<Thunder::Exchange::IDeviceInfo>("DeviceInfo");
     if (deviceInfoPlugin == nullptr) {
         LOGERR("DeviceInfo plugin is not available or not activated");
         return false;
     }
 
-    WPEFramework::Exchange::IDeviceInfo::DeviceSerialNo deviceSerialNumber;
+    Thunder::Exchange::IDeviceInfo::DeviceSerialNo deviceSerialNumber;
     Core::hresult result = deviceInfoPlugin->SerialNumber(deviceSerialNumber);
 
     if (result == Core::ERROR_NONE && !deviceSerialNumber.serialnumber.empty()) {

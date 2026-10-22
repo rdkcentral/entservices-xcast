@@ -46,39 +46,39 @@
 // utils
 #include "WaitGroup.h"
 
-using namespace WPEFramework;
+using namespace Thunder;
 
 using ::testing::NiceMock;
 
 #define TEST_LOG(x, ...) fprintf(stderr, "\033[1;32m[%s:%d](%s)<PID:%d><TID:%d>" x "\n\033[0m", __FILE__, __LINE__, __FUNCTION__, getpid(), gettid(), ##__VA_ARGS__); fflush(stderr);
 
 // Mock class for IDeviceInfo interface
-class MockIDeviceInfo : public WPEFramework::Exchange::IDeviceInfo {
+class MockIDeviceInfo : public Thunder::Exchange::IDeviceInfo {
 public:
     MockIDeviceInfo() : _refCount(1) {}
     virtual ~MockIDeviceInfo() = default;
 
     // Only mock the methods we actually use
-    MOCK_METHOD(Core::hresult, SerialNumber, (WPEFramework::Exchange::IDeviceInfo::DeviceSerialNo& serialNumber), (const, override));
+    MOCK_METHOD(Core::hresult, SerialNumber, (Thunder::Exchange::IDeviceInfo::DeviceSerialNo& serialNumber), (const, override));
 
     // Stub implementations for other pure virtual methods from IDeviceInfo
-    Core::hresult Sku(WPEFramework::Exchange::IDeviceInfo::DeviceModelNo& deviceModelNo) const override { return Core::ERROR_NONE; }
-    Core::hresult Make(WPEFramework::Exchange::IDeviceInfo::DeviceMake& deviceMake) const override { return Core::ERROR_NONE; }
-    Core::hresult Model(WPEFramework::Exchange::IDeviceInfo::DeviceModel& deviceModel) const override { return Core::ERROR_NONE; }
-    Core::hresult DeviceType(WPEFramework::Exchange::IDeviceInfo::DeviceTypeInfos& deviceTypeInfos) const override { return Core::ERROR_NONE; }
-    Core::hresult SocName(WPEFramework::Exchange::IDeviceInfo::DeviceSoc& deviceSoc) const override { return Core::ERROR_NONE; }
-    Core::hresult DistributorId(WPEFramework::Exchange::IDeviceInfo::DeviceDistId& deviceDistId) const override { return Core::ERROR_NONE; }
-    Core::hresult Brand(WPEFramework::Exchange::IDeviceInfo::DeviceBrand& deviceBrand) const override { return Core::ERROR_NONE; }
-    Core::hresult ReleaseVersion(WPEFramework::Exchange::IDeviceInfo::DeviceReleaseVer& deviceReleaseVer) const override { return Core::ERROR_NONE; }
-    Core::hresult ChipSet(WPEFramework::Exchange::IDeviceInfo::DeviceChip& deviceChip) const override { return Core::ERROR_NONE; }
-    Core::hresult FirmwareVersion(WPEFramework::Exchange::IDeviceInfo::FirmwareversionInfo& firmwareVersionInfo) const override { return Core::ERROR_NONE; }
-    Core::hresult SystemInfo(WPEFramework::Exchange::IDeviceInfo::SystemInfos& systemInfo) const override { return Core::ERROR_NONE; }
-    Core::hresult Addresses(WPEFramework::Exchange::IDeviceInfo::IAddressesInfoIterator*& addressesInfo) const override { return Core::ERROR_NONE; }
-    Core::hresult EthMac(WPEFramework::Exchange::IDeviceInfo::EthernetMac& ethernetMac) const override { return Core::ERROR_NONE; }
-    Core::hresult EstbMac(WPEFramework::Exchange::IDeviceInfo::StbMac& stbMac) const override { return Core::ERROR_NONE; }
-    Core::hresult WifiMac(WPEFramework::Exchange::IDeviceInfo::WiFiMac& wiFiMac) const override { return Core::ERROR_NONE; }
-    Core::hresult EstbIp(WPEFramework::Exchange::IDeviceInfo::StbIp& stbIp) const override { return Core::ERROR_NONE; }
-    Core::hresult SupportedAudioPorts(WPEFramework::Exchange::IDeviceInfo::IStringIterator*& supportedAudioPorts, bool& success) const override { return Core::ERROR_NONE; }
+    Core::hresult Sku(Thunder::Exchange::IDeviceInfo::DeviceModelNo& deviceModelNo) const override { return Core::ERROR_NONE; }
+    Core::hresult Make(Thunder::Exchange::IDeviceInfo::DeviceMake& deviceMake) const override { return Core::ERROR_NONE; }
+    Core::hresult Model(Thunder::Exchange::IDeviceInfo::DeviceModel& deviceModel) const override { return Core::ERROR_NONE; }
+    Core::hresult DeviceType(Thunder::Exchange::IDeviceInfo::DeviceTypeInfos& deviceTypeInfos) const override { return Core::ERROR_NONE; }
+    Core::hresult SocName(Thunder::Exchange::IDeviceInfo::DeviceSoc& deviceSoc) const override { return Core::ERROR_NONE; }
+    Core::hresult DistributorId(Thunder::Exchange::IDeviceInfo::DeviceDistId& deviceDistId) const override { return Core::ERROR_NONE; }
+    Core::hresult Brand(Thunder::Exchange::IDeviceInfo::DeviceBrand& deviceBrand) const override { return Core::ERROR_NONE; }
+    Core::hresult ReleaseVersion(Thunder::Exchange::IDeviceInfo::DeviceReleaseVer& deviceReleaseVer) const override { return Core::ERROR_NONE; }
+    Core::hresult ChipSet(Thunder::Exchange::IDeviceInfo::DeviceChip& deviceChip) const override { return Core::ERROR_NONE; }
+    Core::hresult FirmwareVersion(Thunder::Exchange::IDeviceInfo::FirmwareversionInfo& firmwareVersionInfo) const override { return Core::ERROR_NONE; }
+    Core::hresult SystemInfo(Thunder::Exchange::IDeviceInfo::SystemInfos& systemInfo) const override { return Core::ERROR_NONE; }
+    Core::hresult Addresses(Thunder::Exchange::IDeviceInfo::IAddressesInfoIterator*& addressesInfo) const override { return Core::ERROR_NONE; }
+    Core::hresult EthMac(Thunder::Exchange::IDeviceInfo::EthernetMac& ethernetMac) const override { return Core::ERROR_NONE; }
+    Core::hresult EstbMac(Thunder::Exchange::IDeviceInfo::StbMac& stbMac) const override { return Core::ERROR_NONE; }
+    Core::hresult WifiMac(Thunder::Exchange::IDeviceInfo::WiFiMac& wiFiMac) const override { return Core::ERROR_NONE; }
+    Core::hresult EstbIp(Thunder::Exchange::IDeviceInfo::StbIp& stbIp) const override { return Core::ERROR_NONE; }
+    Core::hresult SupportedAudioPorts(Thunder::Exchange::IDeviceInfo::IStringIterator*& supportedAudioPorts, bool& success) const override { return Core::ERROR_NONE; }
 
     // IUnknown interface methods - simple implementations
     void AddRef() const override {
@@ -110,7 +110,7 @@ struct PrivateMethodAccessor {
 
 // Define tags for the private methods
 struct GetSerialNumberFromDeviceInfoTag {
-    typedef bool (XCastManager::*type)(WPEFramework::PluginHost::IShell*, std::string&);
+    typedef bool (XCastManager::*type)(Thunder::PluginHost::IShell*, std::string&);
     friend type get(GetSerialNumberFromDeviceInfoTag);
 };
 
@@ -135,7 +135,7 @@ public:
 
     virtual ~XCastManagerTestWrapper() = default;
 
-    bool testGetSerialNumberFromDeviceInfo(WPEFramework::PluginHost::IShell* pluginService, std::string& serialNumber) {
+    bool testGetSerialNumberFromDeviceInfo(Thunder::PluginHost::IShell* pluginService, std::string& serialNumber) {
         auto methodPtr = get(GetSerialNumberFromDeviceInfoTag{});
         return (m_instance->*methodPtr)(pluginService, serialNumber);
     }
@@ -261,7 +261,7 @@ protected:
         EXPECT_CALL(*mockNetworkManager, GetIPSettings(::testing::_, ::testing::_, ::testing::_))
             .Times(::testing::AnyNumber())
             .WillRepeatedly(::testing::Invoke(
-                [&](string&, const string&, WPEFramework::Exchange::INetworkManager::IPAddress& address) -> uint32_t {
+                [&](string&, const string&, Thunder::Exchange::INetworkManager::IPAddress& address) -> uint32_t {
                     address.primarydns = "75.75.75.76";
                     address.secondarydns = "75.75.76.76";
                     address.dhcpserver = "192.168.0.1";
@@ -275,7 +275,7 @@ protected:
         EXPECT_CALL(*mockNetworkManager, Register(::testing::_))
             .Times(::testing::AnyNumber())
             .WillRepeatedly(::testing::Invoke(
-                [&](WPEFramework::Exchange::INetworkManager::INotification* notification) -> uint32_t {
+                [&](Thunder::Exchange::INetworkManager::INotification* notification) -> uint32_t {
                     _networkManagerNotification = notification;
                     return Core::ERROR_NONE;
                 }));
@@ -851,7 +851,7 @@ TEST_F(XCastTest, updatePowerState)
             }))
         .WillOnce(::testing::Invoke(
             [&](const int keyCode, const PowerState powerState, const string& reason) -> uint32_t {
-                EXPECT_EQ(powerState, WPEFramework::Exchange::IPowerManager::POWER_STATE_ON);
+                EXPECT_EQ(powerState, Thunder::Exchange::IPowerManager::POWER_STATE_ON);
                 _powerState = powerState;
                 if (_modeChangedNotification) {
                     _modeChangedNotification->OnPowerModeChanged(Exchange::IPowerManager::PowerState::POWER_STATE_STANDBY, powerState);
@@ -860,7 +860,7 @@ TEST_F(XCastTest, updatePowerState)
             }))
         .WillOnce(::testing::Invoke(
             [&](const int keyCode, const PowerState powerState, const string& reason) -> uint32_t {
-                EXPECT_EQ(powerState, WPEFramework::Exchange::IPowerManager::POWER_STATE_STANDBY);
+                EXPECT_EQ(powerState, Thunder::Exchange::IPowerManager::POWER_STATE_STANDBY);
                 _powerState = powerState;
                 if (_modeChangedNotification) {
                     _modeChangedNotification->OnPowerModeChanged(Exchange::IPowerManager::PowerState::POWER_STATE_ON, powerState);
@@ -869,7 +869,7 @@ TEST_F(XCastTest, updatePowerState)
             }))
         .WillOnce(::testing::Invoke(
             [&](const int keyCode, const PowerState powerState, const string& reason) -> uint32_t {
-                EXPECT_EQ(powerState, WPEFramework::Exchange::IPowerManager::POWER_STATE_ON);
+                EXPECT_EQ(powerState, Thunder::Exchange::IPowerManager::POWER_STATE_ON);
                 _powerState = powerState;
                 if (_modeChangedNotification) {
                     _modeChangedNotification->OnPowerModeChanged(Exchange::IPowerManager::PowerState::POWER_STATE_STANDBY, powerState);
@@ -1109,7 +1109,7 @@ TEST_F(XCastManagerTest, getSerialNumberFromDeviceInfo_SerialNumberRetrievalFail
         .WillOnce(::testing::Return(&mockDeviceInfo));
 
     // Mock DeviceInfo that returns error
-    WPEFramework::Exchange::IDeviceInfo::DeviceSerialNo deviceSerialNumber;
+    Thunder::Exchange::IDeviceInfo::DeviceSerialNo deviceSerialNumber;
     EXPECT_CALL(mockDeviceInfo, SerialNumber(::testing::_))
         .WillOnce(::testing::DoAll(
             ::testing::SetArgReferee<0>(deviceSerialNumber),
@@ -1131,7 +1131,7 @@ TEST_F(XCastManagerTest, getSerialNumberFromDeviceInfo_EmptySerialNumber)
         .WillOnce(::testing::Return(&mockDeviceInfo));
 
     // Mock DeviceInfo that returns success but empty serial number
-    WPEFramework::Exchange::IDeviceInfo::DeviceSerialNo deviceSerialNumber;
+    Thunder::Exchange::IDeviceInfo::DeviceSerialNo deviceSerialNumber;
     deviceSerialNumber.serialnumber = "";
     EXPECT_CALL(mockDeviceInfo, SerialNumber(::testing::_))
         .WillOnce(::testing::DoAll(
@@ -1154,7 +1154,7 @@ TEST_F(XCastManagerTest, getSerialNumberFromDeviceInfo_Success)
     EXPECT_CALL(mockService, QueryInterfaceByCallsign(::testing::_, ::testing::StrEq("DeviceInfo")))
         .WillOnce(::testing::Return(&mockDeviceInfo));    
     // Mock DeviceInfo that returns success with valid serial number
-    WPEFramework::Exchange::IDeviceInfo::DeviceSerialNo deviceSerialNumber;
+    Thunder::Exchange::IDeviceInfo::DeviceSerialNo deviceSerialNumber;
     deviceSerialNumber.serialnumber = expectedSerial;
     EXPECT_CALL(mockDeviceInfo, SerialNumber(::testing::_))
         .WillOnce(::testing::DoAll(
@@ -1269,7 +1269,7 @@ TEST_F(XCastManagerTest, Integration_GetSerialAndGenerateUUID)
     // Setup mock for successful serial retrieval
     EXPECT_CALL(mockService, QueryInterfaceByCallsign(::testing::_, ::testing::StrEq("DeviceInfo")))
         .WillOnce(::testing::Return(&mockDeviceInfo));    
-    WPEFramework::Exchange::IDeviceInfo::DeviceSerialNo deviceSerialNumber;
+    Thunder::Exchange::IDeviceInfo::DeviceSerialNo deviceSerialNumber;
     deviceSerialNumber.serialnumber = expectedSerial;
     EXPECT_CALL(mockDeviceInfo, SerialNumber(::testing::_))
         .WillOnce(::testing::DoAll(
