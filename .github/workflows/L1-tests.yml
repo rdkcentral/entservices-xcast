@@ -129,7 +129,7 @@ jobs:
         with:
           repository: rdkcentral/networkmanager
           path: networkmanager
-          ref: v4.5.0
+          ref: v3.0.0
 
       - name: Checkout entservices-xcast
         if: ${{ inputs.caller_source == 'local' }}
@@ -296,8 +296,9 @@ jobs:
           ref: develop
 
       - name: Create parent helpers compatibility path
-        run: >
+        run: |
           if [ ! -e "$GITHUB_WORKSPACE/../entservices-helpers" ]; then ln -s "$GITHUB_WORKSPACE/entservices-helpers" "$GITHUB_WORKSPACE/../entservices-helpers"; fi
+          ln -s "$GITHUB_WORKSPACE/entservices-helpers/helpers" "$GITHUB_WORKSPACE/entservices-xcast/helpers" || true
 
       - name: Build entservices-helpers
         run: >
@@ -402,6 +403,7 @@ jobs:
           -I $GITHUB_WORKSPACE/entservices-testframework/Tests/headers/ccec/drivers
           -I $GITHUB_WORKSPACE/entservices-testframework/Tests/headers/network
           -I $GITHUB_WORKSPACE/entservices-testframework/Tests
+          -I $GITHUB_WORKSPACE/entservices-helpers/helpers
           -I $GITHUB_WORKSPACE/install/usr/include
           -I $GITHUB_WORKSPACE/install/usr/include/WPEFramework
           -include $GITHUB_WORKSPACE/entservices-testframework/Tests/mocks/Iarm.h
