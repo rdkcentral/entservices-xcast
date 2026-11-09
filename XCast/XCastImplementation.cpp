@@ -808,9 +808,9 @@ namespace WPEFramework
         void XCastImplementation::onPowerModePreChange(const PowerState currentState, const PowerState newState, const int transactionId)
         {
             m_powerState = newState;
-            const bool isTeardown = ((WPEFramework::Exchange::IPowerManager::POWER_STATE_STANDBY_DEEP_SLEEP == newState) ||
+            const bool onDeepsleep = ((WPEFramework::Exchange::IPowerManager::POWER_STATE_STANDBY_DEEP_SLEEP == newState) ||
                                      (WPEFramework::Exchange::IPowerManager::POWER_STATE_OFF == newState));
-            if (isTeardown)
+            if (onDeepsleep)
             {
                 // Reserve time before queueing teardown; the monitor only extends it if teardown overruns.
                 requestPowerModeChangeDelay(transactionId, DEEP_SLEEP_TEARDOWN_BUDGET_SEC);
@@ -822,7 +822,7 @@ namespace WPEFramework
             event.currentState = currentState;
             event.newState = newState;
             event.transactionId = transactionId;
-            if (!enqueuePowerEvent(event) && isTeardown)
+            if (!enqueuePowerEvent(event) && onDeepsleep)
             {
                 stopPowerDelayMonitor(transactionId);
             }
