@@ -32,8 +32,12 @@
 #include <com/com.h>
 #include <core/core.h>
 #include <atomic>
+#include <chrono>
+#include <condition_variable>
+#include <deque>
 #include <memory>
 #include <mutex>
+#include <thread>
 #include <vector>
 #include <glib.h> 
 
@@ -54,26 +58,6 @@ namespace WPEFramework
 {
     namespace Plugin
     {
-        WPEFramework::Exchange::IPowerManager::PowerState m_powerState = WPEFramework::Exchange::IPowerManager::POWER_STATE_STANDBY;
-
-        // Tracks the number of in-flight threadPowerModeChangeEvent threads; reserved before a worker
-        // is detached so Deinitialize() never observes zero while a worker is still starting/running.
-        std::atomic<int> powerModeChangeActiveCount{0};
-
-        // Generic RAII helper: reserves (increments) an atomic counter on construction and releases
-        // (decrements) it on destruction. Reusable for tracking any in-flight worker/operation count.
-        class ScopedCounter
-        {
-            public:
-                explicit ScopedCounter(std::atomic<int>& counter) : _counter(counter) { ++_counter; }
-                ~ScopedCounter() { --_counter; }
-                ScopedCounter(const ScopedCounter&) = delete;
-                ScopedCounter& operator=(const ScopedCounter&) = delete;
-
-            private:
-                std::atomic<int>& _counter;
-        };
-
         class XCastImplementation : public Exchange::IXCast,public Exchange::IConfiguration, public XCastNotifier 
         {
          public:
@@ -94,7 +78,8 @@ namespace WPEFramework
                     HIDE_REQUEST,
                     STATE_REQUEST,
                     RESUME_REQUEST,
-                    UPDATE_POWERSTATE
+                    UPDATE_POWERSTATE,
+                    PROCESS_POWER_EVENTS
             };
  
              static XCastImplementation *instance(XCastImplementation *XCastImpl = nullptr);
@@ -148,7 +133,7 @@ namespace WPEFramework
 
         private:
             class PowerManagerNotification : public Exchange::IPowerManager::INetworkStandbyModeChangedNotification,
-                                                     public Exchange::IPowerManager::IModeChangedNotification {
+                                                     public Exchange::IPowerManager::IModePreChangeNotification {
                 private:
                     PowerManagerNotification(const PowerManagerNotification&) = delete;
                     PowerManagerNotification& operator=(const PowerManagerNotification&) = delete;
@@ -161,27 +146,20 @@ namespace WPEFramework
                     ~PowerManagerNotification() override = default;
 
                 public:
-                    void OnPowerModeChanged(const PowerState currentState, const PowerState newState) override
+                    // Called with PowerManager's callback lock held: only enqueue, never block.
+                    void OnPowerModePreChange(const PowerState currentState, const PowerState newState, const int transactionId, const int stateChangeAfter) override
                     {
-                        LOGINFO("onPowerModeChanged: State Changed [%d] -- > [%d]",currentState, newState);
-                        m_powerState = newState;
-                        LOGINFO("creating worker thread for threadPowerModeChangeEvent m_powerState :%d",m_powerState);
-                        // The guard reserves the slot here (calling thread) before the worker starts, and
-                        // releases it automatically once the worker thread's callable returns.
-                        auto guard = std::make_shared<ScopedCounter>(powerModeChangeActiveCount);
-                        XCastImplementation* parent = &_parent;
-                        std::thread powerModeChangeThread([parent, guard]() {
-                            parent->threadPowerModeChangeEvent();
-                        });
-                        powerModeChangeThread.detach();
+                        LOGINFO("OnPowerModePreChange: [%d] -- > [%d] transactionId[%d] stateChangeAfter[%d]", currentState, newState, transactionId, stateChangeAfter);
+                        _parent.onPowerModePreChange(currentState, newState, transactionId);
                     }
 
                     void OnNetworkStandbyModeChanged(const bool enabled) override
                     {
-                        _parent.m_networkStandbyMode = enabled;
-                        LOGWARN("creating worker thread for threadNetworkStandbyModeChangeEvent Mode :%u", _parent.m_networkStandbyMode);
-                        std::thread networkStandbyModeChangeThread = std::thread(&XCastImplementation::networkStandbyModeChangeEvent,&_parent);
-                        networkStandbyModeChangeThread.detach();
+                        LOGINFO("OnNetworkStandbyModeChanged: [%u]", enabled);
+                        PowerEvent event;
+                        event.type = PowerEvent::NETWORK_STANDBY_CHANGED;
+                        event.networkStandbyMode = enabled;
+                        _parent.enqueuePowerEvent(event);
                     }
 
                     template <typename T>
@@ -193,7 +171,7 @@ namespace WPEFramework
 
                     BEGIN_INTERFACE_MAP(PowerManagerNotification)
                     INTERFACE_ENTRY(Exchange::IPowerManager::INetworkStandbyModeChangedNotification)
-                    INTERFACE_ENTRY(Exchange::IPowerManager::IModeChangedNotification)
+                    INTERFACE_ENTRY(Exchange::IPowerManager::IModePreChangeNotification)
                     END_INTERFACE_MAP
 
                 private:
@@ -334,14 +312,54 @@ namespace WPEFramework
             WPEFramework::JSONRPC::LinkType<WPEFramework::Core::JSON::IElement> *m_SystemPluginObj = NULL;
             PluginHost::IShell* _service;
 
+            struct PowerEvent {
+                enum Type { PRE_CHANGE, NETWORK_STANDBY_CHANGED };
+                Type type = PRE_CHANGE;
+                PowerState currentState = WPEFramework::Exchange::IPowerManager::POWER_STATE_UNKNOWN;
+                PowerState newState = WPEFramework::Exchange::IPowerManager::POWER_STATE_UNKNOWN;
+                int transactionId = 0;
+                bool networkStandbyMode = false;
+            };
+
             PowerManagerInterfaceRef _powerManagerPlugin;
             Core::Sink<PowerManagerNotification> _pwrMgrNotification;
-            void threadPowerModeChangeEvent(void);
-            void networkStandbyModeChangeEvent(void);
+            std::atomic<PowerState> m_powerState;
             static bool m_xcastEnable;
             static bool m_standbyBehavior;
-            bool m_networkStandbyMode;
+            std::atomic<bool> m_networkStandbyMode;
             bool _registeredPowerEventHandlers;
+            // Guards _powerManagerPlugin and the pre-change client id/flag against Deinitialize().
+            std::mutex _powerManagerLock;
+            uint32_t _preChangeClientId;
+            bool _preChangeClientAdded;
+
+            // Power events are queued and drained in order by a single WorkerPool job at a time.
+            std::mutex _powerEventQueueLock;
+            std::deque<PowerEvent> _powerEventQueue;
+            bool _powerEventJobQueued;
+            bool _powerEventsAccepted;
+            // Held while a power event is being handled; Deinitialize() takes it to wait for completion.
+            std::mutex _powerEventHandlerLock;
+            // Set once the cast service is torn down ahead of deep sleep; cleared when restarted.
+            std::atomic<bool> _castSuspended;
+
+            // Keeps the pre-change delay reservation alive while teardown is still running.
+            std::mutex _delayMonitorCtrlLock;
+            std::mutex _delayMonitorLock;
+            std::condition_variable _delayMonitorCv;
+            bool _delayMonitorDone;
+            int _delayMonitorTransactionId;
+            std::thread _delayMonitorThread;
+
+            void onPowerModePreChange(const PowerState currentState, const PowerState newState, const int transactionId);
+            bool enqueuePowerEvent(const PowerEvent& event);
+            void processPowerEvents();
+            void handlePowerModePreChange(const PowerEvent& event);
+            void stopPowerEventProcessing();
+            void requestPowerModeChangeDelay(int transactionId, int delaySec);
+            void startPowerDelayMonitor(int transactionId);
+            void stopPowerDelayMonitor(int transactionId, bool force = false);
+            void powerDelayMonitor(int transactionId);
 
         private:
             Exchange::INetworkManager* _networkManagerPlugin;
