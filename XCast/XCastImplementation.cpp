@@ -1147,6 +1147,26 @@ namespace WPEFramework
             return Core::ERROR_NONE;
         }
 
+        Core::hresult XCastImplementation::GetAdditionalDataUrl(const string& applicationName, string& additionalDataUrl, bool& success)
+        {
+            additionalDataUrl.clear();
+            success = false;
+            if (nullptr == m_xcast_manager)
+            {
+                LOGERR("m_xcast_manager is NULL");
+                return Core::ERROR_GENERAL;
+            }
+
+            success = m_xcast_manager->getAdditionalDataUrl(applicationName, additionalDataUrl);
+            if (!success)
+            {
+                LOGERR("Additional data URL unavailable for unregistered app[%s]", applicationName.c_str());
+                return Core::ERROR_GENERAL;
+            }
+
+            return Core::ERROR_NONE;
+        }
+
         Core::hresult XCastImplementation::SetNetworkStandbyMode(bool networkStandbyMode)
         {
             LOGINFO("networkStandbyMode [%d]", networkStandbyMode);
