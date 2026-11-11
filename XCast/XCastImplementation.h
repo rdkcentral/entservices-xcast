@@ -410,7 +410,8 @@ namespace WPEFramework
                 const Exchange::IAppManager::AppErrorReason errorReason);
 
             void InitializeAppActions(PluginHost::IShell* service);
-            void notifyAppActionsLaunch(const string& appName, const string& intent);
+            void notifyAppActions(const string& appName, const string& intent,
+                const string& dialPayload = "", const string& additionalDataUrl = "");
             
             void onXcastUpdatePowerStateRequest(string powerState);
             uint32_t SetNetworkStandbyMode(bool networkStandbyMode);

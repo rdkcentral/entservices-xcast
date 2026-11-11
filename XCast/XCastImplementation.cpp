@@ -616,16 +616,33 @@ namespace WPEFramework
             }
         }
 
-        void XCastImplementation::notifyAppActionsLaunch(const string& appName, const string& intent)
+        void XCastImplementation::notifyAppActions(const string& appName, const string& intent,
+            const string& dialPayload, const string& additionalDataUrl)
         {
-            LOGWARN("AppActions notifyAppActionsLaunch appName: %s", appName.c_str());
+            LOGWARN("AppActions notifyAppActions appName: %s", appName.c_str());
             if (_appActionsPlugin)
             {
-                Core::hresult result = _appActionsPlugin->ActionStart("XCast", intent, appName);
+                string actionIntent = "";
+                JsonObject context;
+                JsonObject action;
+                JsonObject data;
+                context["source"] = "DIAL";
+                action["action"] = intent;
+                action["context"] = context;
+
+                if (intent == "launch")
+                {
+                    data["dialPayload"] = dialPayload;
+                    data["additionalDataUrl"] = additionalDataUrl;
+                }
+                action["data"] = data;
+                action.ToString(actionIntent);
+
+                Core::hresult result = _appActionsPlugin->ActionStart("DIAL", actionIntent, appName);
                 if (Core::ERROR_NONE != result)
                 {
                     LOGERR("AppActions::ActionStart failed for app[%s] intent[%s], Error[%x]",
-                        appName.c_str(), intent.c_str(), result);
+                        appName.c_str(), actionIntent.c_str(), result);
                 }
             }
             else
@@ -699,7 +716,7 @@ namespace WPEFramework
         {
             LOGINFO("[EVENT] appName[%s], strPayLoad[%s], strQuery[%s], strAddDataUrl[%s]",
                     appName.c_str(),strPayLoad.c_str(),strQuery.c_str(),strAddDataUrl.c_str());
-            notifyAppActionsLaunch(appName, "Launch");
+            notifyAppActions(appName, "launch", strPayLoad, strAddDataUrl);
             JsonObject params;
             params["appName"]  = appName.c_str();
             params["strPayLoad"]  = strPayLoad.c_str();
@@ -711,7 +728,7 @@ namespace WPEFramework
         void XCastImplementation::onXcastApplicationLaunchRequest(string appName, string parameter)
         {
             LOGINFO("[EVENT] appName[%s], parameter[%s]",appName.c_str(),parameter.c_str());
-            notifyAppActionsLaunch(appName, "Launch");
+            notifyAppActions(appName, "launch", parameter);
             JsonObject params;
             params["appName"]  = appName.c_str();
             params["parameter"]  = parameter.c_str();
@@ -721,7 +738,7 @@ namespace WPEFramework
         void XCastImplementation::onXcastApplicationStopRequest(string appName, string appId)
         {
             LOGINFO("[EVENT] appName[%s], appId[%s]",appName.c_str(),appId.c_str());
-            notifyAppActionsLaunch(appName, "Stop");
+            notifyAppActions(appName, "stop");
             JsonObject params;
             params["appName"]  = appName.c_str();
             params["appId"]  = appId.c_str();
@@ -731,7 +748,7 @@ namespace WPEFramework
         void XCastImplementation::onXcastApplicationHideRequest(string appName, string appId)
         {
             LOGINFO("[EVENT] appName[%s], appId[%s]",appName.c_str(),appId.c_str());
-            notifyAppActionsLaunch(appName, "Hide");
+            notifyAppActions(appName, "hide");
             JsonObject params;
             params["appName"]  = appName.c_str();
             params["appId"]  = appId.c_str();
@@ -741,7 +758,7 @@ namespace WPEFramework
         void XCastImplementation::onXcastApplicationResumeRequest(string appName, string appId)
         {
             LOGINFO("[EVENT] appName[%s], appId[%s]",appName.c_str(),appId.c_str());
-            notifyAppActionsLaunch(appName, "Resume");
+            notifyAppActions(appName, "resume");
             JsonObject params;
             params["appName"]  = appName.c_str();
             params["appId"]  = appId.c_str();
