@@ -36,6 +36,7 @@
 #include <condition_variable>
 #include <deque>
 #include <memory>
+#include <map>
 #include <mutex>
 #include <thread>
 #include <vector>
@@ -280,6 +281,7 @@ namespace WPEFramework
             
             Core::hresult SetApplicationState(const string& applicationName, const Exchange::IXCast::State& state, const string& applicationId, const Exchange::IXCast::ErrorCode& error,  Exchange::IXCast::XCastSuccess &success) override;
             Core::hresult GetProtocolVersion(string &protocolVersion, bool &success) override;
+            Core::hresult GetAdditionalDataUrl(const string& applicationName, string& additionalDataUrl, bool& success) override;
             Core::hresult SetManufacturerName(const string &manufacturername,  Exchange::IXCast::XCastSuccess &success) override;
             Core::hresult GetManufacturerName(string &manufacturername, bool &success) override;
             Core::hresult SetModelName(const string &modelname,  Exchange::IXCast::XCastSuccess &success) override;
@@ -428,8 +430,7 @@ namespace WPEFramework
                 const Exchange::IAppManager::AppErrorReason errorReason);
 
             void InitializeAppActions(PluginHost::IShell* service);
-            void notifyAppActions(const string& appName, const string& intent,
-                const string& dialPayload = "", const string& additionalDataUrl = "");
+            void notifyAppActions(const string& appId, const string& appContentData);
             
             void onXcastUpdatePowerStateRequest(string powerState);
             uint32_t SetNetworkStandbyMode(bool networkStandbyMode);
