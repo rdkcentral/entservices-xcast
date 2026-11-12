@@ -36,15 +36,11 @@ namespace WPEFramework  {
 
     namespace {
 
-        static Metadata<SystemMonitor> metadata(
-        // Version
-	API_VERSION_NUMBER_MAJOR, API_VERSION_NUMBER_MINOR, API_VERSION_NUMBER_PATCH,
-        // Preconditions
-        {},
-        // Terminations
-        {},
-        // Controls
-        {}
+        static Plugin::Metadata<Plugin::SystemMonitor> metadata(
+            API_VERSION_NUMBER_MAJOR, API_VERSION_NUMBER_MINOR, API_VERSION_NUMBER_PATCH,
+            /* Preconditions  */ {},
+            /* Terminations   */ {},
+            /* Controls       */ {}
         );
     }
 namespace Plugin {
@@ -168,18 +164,7 @@ namespace Plugin {
                         _service, PluginHost::IShell::DEACTIVATED, PluginHost::IShell::FAILURE));
             }
         }
-                void SystemMonitor::OnHighCpuUsage(const double cpuUsage,const double threshold)     
-                {
-                    if (_parent) {
-                        _parent->OnHighCpuUsage(cpuUsage, threshold);
-                    }
-                }
-                void SystemMonitor::OnLowMemory(const uint64_t freeMemory, const double threshold) 
-                {
-                    if (_parent) {
-                        _parent->OnLowMemory(freeMemory, threshold);
-                    }
-                }
+              
 
 Core::hresult SystemMonitor::TriggerMemoryNotification()
 {

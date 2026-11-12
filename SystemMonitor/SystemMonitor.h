@@ -53,11 +53,10 @@ namespace Plugin {
                 {
                 }
                 ~Notification() override = default;
-                  void Activated(RPC::IRemoteConnection* connection) override
-                  {
+                  void Activated(RPC::IRemoteConnection* connection)                    {
                       // Handle activation
                   }
-                void Deactivated(RPC::IRemoteConnection* connection) override
+                void Deactivated(RPC::IRemoteConnection* connection)  
                 {
                     // Handle deactivation
                 }
@@ -66,9 +65,18 @@ namespace Plugin {
                     INTERFACE_ENTRY(RPC::IRemoteConnection::INotification)
                     END_INTERFACE_MAP
 
-               void OnHighCpuUsage(const double cpuUsage,const double threshold) override;
-               void OnLowMemory(const uint64_t freeMemory, const double threshold) override;
-
+                void OnHighCpuUsage(const double cpuUsage,const double threshold)     
+                {
+                    //if (_parent) {
+                     //   _parent->OnHighCpuUsage(cpuUsage, threshold);
+                    //}
+                }
+                void OnLowMemory(const uint64_t freeMemory, const double threshold) 
+                {
+                   // if (_parent) {
+                    //    _parent->OnLowMemory(freeMemory, threshold);
+                    //}
+                }
                  
             private:
             ISystemMonitor* _parent;
@@ -101,11 +109,11 @@ namespace Plugin {
         const string Initialize(PluginHost::IShell* service) override;
         void Deinitialize(PluginHost::IShell* service) override;
         string Information() const override;
-        void Deactivated(RPC::IRemoteConnection* connection) override;
+        void Deactivated(RPC::IRemoteConnection* connection);
         Core::hresult TriggerMemoryNotification() override;
         Core::hresult TriggerCpuNotification() override;
 
-    }  
+    };  
 
 } // Plugin
 } // Thunder
