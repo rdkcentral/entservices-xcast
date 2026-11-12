@@ -24,6 +24,7 @@
 #include <interfaces/ISystemMonitor.h>
 #include <interfaces/IConfiguration.h>
 #include "tracing/Logging.h"
+#include "UtilsLogging.h"
 #include <plugins/plugins.h>
 #include <core/core.h>
 #include <com/com.h>
@@ -68,7 +69,7 @@ namespace WPEFramework{
 	
     Core::hresult TriggerMemoryNotification() override;
     Core::hresult TriggerCpuNotification() override;
-    
+
 
 	   /*
      	 * Common event entry points.

@@ -37,7 +37,8 @@ namespace Plugin {
 
     class SystemMonitor : public PluginHost::IPlugin, 
                           public PluginHost::JSONRPC, 
-                          public Exchange::ISystemMonitor {
+                          public Exchange::ISystemMonitor 
+    {
          private:
         class Notification : public RPC::IRemoteConnection::INotification,
                              public Exchange::ISystemMonitor::INotification
@@ -65,18 +66,9 @@ namespace Plugin {
                     INTERFACE_ENTRY(RPC::IRemoteConnection::INotification)
                     END_INTERFACE_MAP
 
-                void OnHighCpuUsage(const double cpuUsage,const double threshold) override    
-                {
-                    if (_parent) {
-                        _parent->OnHighCpuUsage(cpuUsage, threshold);
-                    }
-                }
-                void OnLowMemory(const uint64_t freeMemory, const double threshold) override
-                {
-                    if (_parent) {
-                        _parent->OnLowMemory(freeMemory, threshold);
-                    }
-                }
+               void OnHighCpuUsage(const double cpuUsage,const double threshold) override;
+               void OnLowMemory(const uint64_t freeMemory, const double threshold) override;
+
                  
             private:
             ISystemMonitor* _parent;
@@ -113,7 +105,7 @@ namespace Plugin {
         Core::hresult TriggerMemoryNotification() override;
         Core::hresult TriggerCpuNotification() override;
 
-         
+    }  
 
 } // Plugin
 } // Thunder

@@ -261,7 +261,7 @@ void SystemMonitorImplementation::ProcessCpuSample()
 
         _cpuHigh = true;
 
-        NotifyCpuHighUsage(currentCpuUsage,_cpuHighThreshold);
+        NotifyHighCpuUsage(currentCpuUsage,_cpuHighThreshold);
     }
 
     /*
@@ -273,7 +273,7 @@ void SystemMonitorImplementation::ProcessCpuSample()
 
         _cpuHigh = false;
 
-        NotifyCpuHighUsage(currentCpuUsage,_cpuHighThreshold);
+        NotifyHighCpuUsage(currentCpuUsage,_cpuHighThreshold);
     }
 }
 
@@ -346,7 +346,7 @@ Core::hresult SystemMonitorImplementation::TriggerCpuNotification()
 
     _cpuHigh = true;
 
-    NotifyCpuHighUsage(testCpuUsage,_cpuHighThreshold);
+    NotifyHighCpuUsage(testCpuUsage,_cpuHighThreshold);
 
     return Core::ERROR_NONE;
 }

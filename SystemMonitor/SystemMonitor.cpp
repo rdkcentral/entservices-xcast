@@ -168,7 +168,42 @@ namespace Plugin {
                         _service, PluginHost::IShell::DEACTIVATED, PluginHost::IShell::FAILURE));
             }
         }
+                void SystemMonitor::OnHighCpuUsage(const double cpuUsage,const double threshold)     
+                {
+                    if (_parent) {
+                        _parent->OnHighCpuUsage(cpuUsage, threshold);
+                    }
+                }
+                void SystemMonitor::OnLowMemory(const uint64_t freeMemory, const double threshold) 
+                {
+                    if (_parent) {
+                        _parent->OnLowMemory(freeMemory, threshold);
+                    }
+                }
 
+Core::hresult SystemMonitor::TriggerMemoryNotification()
+{
+    constexpr uint64_t testTotalMemory = 2101071872ULL;
+
+    constexpr uint64_t testFreeMemory = 65122304ULL;
+
+   // _memoryLow = true;
+
+    //NotifyLowMemory(testFreeMemory,_memoryHighUsageThreshold);
+
+    return Core::ERROR_NONE;
+}
+
+Core::hresult SystemMonitor::TriggerCpuNotification()
+{
+    constexpr double testCpuUsage = 95.0;
+
+    //_cpuHigh = true;
+
+    //NotifyHighCpuUsage(testCpuUsage,_cpuHighThreshold);
+ 
+    return Core::ERROR_NONE;
+}
     
 } // Plugin
 } // Thunder
