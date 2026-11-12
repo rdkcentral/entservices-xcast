@@ -182,7 +182,7 @@ void SystemMonitorImplementation::NotifyHighCpuUsage(const double cpuUsage,const
 
     // Don't hold _adminLock while calling external notification sinks.
     for (auto* sink : sinks) {
-        sink->OnCpuHighUsage(cpuUsage, threshold);
+        sink->OnHighCpuUsage(cpuUsage, threshold);
         sink->Release();
     }
 }
@@ -350,7 +350,7 @@ Core::hresult SystemMonitorImplementation::TriggerCpuNotification()
 
     return Core::ERROR_NONE;
 }
-
+#if 0
 void SystemMonitorImplementation::ReleaseNotificationSinks()
 {
 	std::list<Exchange::ISystemMonitor::INotification*> subscribers;
@@ -369,5 +369,7 @@ void SystemMonitorImplementation::ReleaseNotificationSinks()
 		}
 	}
 }
+#endif
+
 } // plugin
 } // WPEFramework

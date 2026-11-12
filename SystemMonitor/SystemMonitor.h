@@ -65,16 +65,16 @@ namespace Plugin {
                     INTERFACE_ENTRY(RPC::IRemoteConnection::INotification)
                     END_INTERFACE_MAP
 
-                OnHighCpuUsage() override    
+                void OnHighCpuUsage(const double cpuUsage,const double threshold) override    
                 {
                     if (_parent) {
-                        _parent->OnHighCpuUsage();
+                        _parent->OnHighCpuUsage(cpuUsage, threshold);
                     }
                 }
-                OnLowMemory() override
+                void OnLowMemory(const uint64_t freeMemory, const double threshold) override
                 {
                     if (_parent) {
-                        _parent->OnLowMemory();
+                        _parent->OnLowMemory(freeMemory, threshold);
                     }
                 }
                  
@@ -110,5 +110,10 @@ namespace Plugin {
         void Deinitialize(PluginHost::IShell* service) override;
         string Information() const override;
         void Deactivated(RPC::IRemoteConnection* connection) override;
+        Core::hresult TriggerMemoryNotification() override;
+        Core::hresult TriggerCpuNotification() override;
+
+         
+
 } // Plugin
 } // Thunder

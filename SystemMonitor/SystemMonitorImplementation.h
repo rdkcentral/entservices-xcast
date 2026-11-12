@@ -66,9 +66,10 @@ namespace WPEFramework{
     Core::hresult FreeMemory(uint64_t&  memory ) const override;
     Core::hresult CpuLoad(double&  load ) const override;
 	
-    //Core::hresult TriggerMemoryNotification() override;
-    //Core::hresult TriggerCpuNotification() override;
-        
+    Core::hresult TriggerMemoryNotification() override;
+    Core::hresult TriggerCpuNotification() override;
+    
+
 	   /*
      	 * Common event entry points.
      	 */
