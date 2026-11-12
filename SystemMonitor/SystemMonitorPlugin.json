@@ -1,0 +1,15 @@
+{
+  "$schema": "plugin.schema.json",
+  "info": {
+    "title": "SystemMonitor Plugin",
+    "callsign": "org.rdk.SystemMonitor",
+    "status": "development",
+    "description": [
+      "Plugin for monitoring system resources and performance metrics."
+    ],
+    "version": "1.0"
+  },
+  "interface": {
+    "$cppref": "{cppinterfacedir}/ISystemMonitor.h"
+  }
+}

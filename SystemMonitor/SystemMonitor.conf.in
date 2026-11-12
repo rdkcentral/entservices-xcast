@@ -1,0 +1,5 @@
+startmode = "@PLUGIN_SYSTEMMONITOR_STARTMODE@"
+callsign    = "org.rdk.SystemMonitor"
+
+
+
