@@ -18,6 +18,10 @@
  */
 
  #include "SystemMonitorImplementation.h"
+#include <fstream>
+#include <sstream>
+#include <string>
+#include <sys/sysinfo.h>
 
  namespace WPEFramework {
     namespace Plugin {
@@ -33,7 +37,6 @@
         _memoryLow(false)
         {
             LOGINFO("SystemMonitorImplementation constructed");
-            _initialized = true;
         }
     SystemMonitorImplementation::~SystemMonitorImplementation(){
          LOGINFO("SystemMonitorImplementation destroyed");
@@ -118,60 +121,70 @@ Core::hresult SystemMonitorImplementation::Register(Exchange::ISystemMonitor::IN
 
 void SystemMonitorImplementation::NotifyLowMemory(const uint64_t freeMemory, const double threshold)
 {
-    /*
-    const uint64_t usedMemory = totalMemory >= freeMemory ? totalMemory - freeMemory : 0;
+     
+     std::vector<Exchange::ISystemMonitor::INotification*> sinks;
 
-    double usedPercentage = 0.0;
+    {
+        Core::SafeSyncType<Core::CriticalSection> lock(_adminLock);
 
-    if (totalMemory != 0) {
-        usedPercentage = (static_cast<double>(usedMemory) * 100.0) / static_cast<double>(totalMemory);
+        sinks.reserve(_notificationSinks.size());
+
+        for (auto* sink : _notificationSinks) {
+            if (sink != nullptr) {
+                sink->AddRef();
+                sinks.push_back(sink);
+            }
+        }
     }
-    TRACE(Trace::Information, (_T("Memory event:total=%llu free=%llu"),
-         static_cast<unsigned long long>(
-             totalMemory),
-         static_cast<unsigned long long>(
-             freeMemory)));
-    */
-    JsonObject parameters;
+    TRACE(
+        Trace::Information,
+        (_T("Low memory detected: available=%llu KiB, threshold=%llu KiB"),
+         static_cast<unsigned long long>(freeMemory),
+         static_cast<unsigned long long>(threshold)));
 
-    parameters[_T("state")] = _memoryLow ? _T("LOW_MEMORY") : _T("NORMAL");
+    /*
+     * Do not hold _adminLock while invoking external callbacks.
+     *
+     * The callback could cause Unregister(), COM-RPC traffic or another
+     * call into this implementation.
+     */
+    for (auto* sink : sinks) {
+        sink->OnLowMemory(
+            freeMemory,
+            threshold);
 
-   // parameters[_T("totalMemory")] = totalMemory;
-
-    parameters[_T("freeMemory")] = freeMemory;
-
-    //parameters[_T("usedMemory")] = usedMemory;
-
-    //parameters[_T("usedPercentage")] = usedPercentage;
-
-    parameters[_T("highUsageThreshold")] = _memoryHighUsageThreshold;
-
-   // TRACE(Trace::Information,(_T("Sending JSON-RPC event OnLowMemory:free=%llu ),
-     //    static_cast<unsigned long long>(freeMemory));
-
-    Notify(_T("OnLowMemory"),parameters);
+        sink->Release();
+    }
 }
 
 void SystemMonitorImplementation::NotifyHighCpuUsage(const double cpuUsage,const double threshold)
 {
-    JsonObject parameters;
+     std::vector<Exchange::ISystemMonitor::INotification*> sinks;
 
-    TRACE(Trace::Information,(_T("CPU event: usage=%.2f threshold=%.2f"),
+    {
+        Core::SafeSyncType<Core::CriticalSection> lock(_adminLock);
+
+        sinks.reserve(_notificationSinks.size());
+
+        for (auto* sink : _notificationSinks) {
+            if (sink != nullptr) {
+                sink->AddRef();
+                sinks.push_back(sink);
+            }
+        }
+    }
+
+    TRACE(
+        Trace::Information,
+        (_T("High CPU usage detected: usage=%.2f%% threshold=%.2f%%"),
          cpuUsage,
          threshold));
 
-    parameters[_T("state")] = _cpuHigh ? _T("HIGH"): _T("NORMAL");
-
-    parameters[_T("cpuUsage")] = cpuUsage;
-
-    parameters[_T("threshold")] = threshold;
-
-    TRACE(Trace::Information, (_T("Sending JSON-RPC event OnCpuHighUsage: state=%s usage=%.2f threshold=%.2f"),
-         _cpuHigh ? _T("HIGH") : _T("NORMAL"),
-         cpuUsage,
-         threshold));
-
-    Notify(_T("onCpuHighUsage"),parameters);
+    // Don't hold _adminLock while calling external notification sinks.
+    for (auto* sink : sinks) {
+        sink->OnCpuHighUsage(cpuUsage, threshold);
+        sink->Release();
+    }
 }
 
 
@@ -205,6 +218,7 @@ void SystemMonitorImplementation::NotifyHighCpuUsage(const double cpuUsage,const
 
     memory = static_cast<uint64_t>(info.freeram) *
              static_cast<uint64_t>(info.mem_unit);
+    //NotifyLowMemory(memory,_memoryHighUsageThreshold);
         return Core::ERROR_NONE;
     }
     Core::hresult SystemMonitorImplementation::CpuLoad(double&  load ) const {
@@ -219,8 +233,10 @@ void SystemMonitorImplementation::NotifyHighCpuUsage(const double cpuUsage,const
     if (loadAverage.fail()) {
         return Core::ERROR_GENERAL;
     }
+   // NotifyCpuHighUsage(load,_cpuHighThreshold);
         return Core::ERROR_NONE;
     }
+#if 0
 
 void SystemMonitorImplementation::ProcessCpuSample()
 {
@@ -308,8 +324,8 @@ void SystemMonitorImplementation::ProcessMemorySample()
         NotifyLowMemory(freeMemory,_memoryHighUsageThreshold);
     }
 }
-/*
 
+#endif
 
 Core::hresult SystemMonitorImplementation::TriggerMemoryNotification()
 {
@@ -319,7 +335,7 @@ Core::hresult SystemMonitorImplementation::TriggerMemoryNotification()
 
     _memoryLow = true;
 
-    NotifyLowMemory(totalMemory,freeMemory);
+    NotifyLowMemory(testFreeMemory,_memoryHighUsageThreshold);
 
     return Core::ERROR_NONE;
 }
@@ -334,7 +350,7 @@ Core::hresult SystemMonitorImplementation::TriggerCpuNotification()
 
     return Core::ERROR_NONE;
 }
-*/
+
 void SystemMonitorImplementation::ReleaseNotificationSinks()
 {
 	std::list<Exchange::ISystemMonitor::INotification*> subscribers;
