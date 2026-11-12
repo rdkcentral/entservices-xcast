@@ -456,6 +456,7 @@ TEST_F(XCastTest, RegisteredMethods)
     EXPECT_EQ(Core::ERROR_NONE, mJsonRpcHandler.Exists(_T("getFriendlyName")));
     EXPECT_EQ(Core::ERROR_NONE, mJsonRpcHandler.Exists(_T("setFriendlyName")));
     EXPECT_EQ(Core::ERROR_NONE, mJsonRpcHandler.Exists(_T("getProtocolVersion")));
+	EXPECT_EQ(Core::ERROR_NONE, mJsonRpcHandler.Exists(_T("getAdditionalDataUrl")));
     EXPECT_EQ(Core::ERROR_NONE, mJsonRpcHandler.Exists(_T("unregisterApplications")));
     EXPECT_EQ(Core::ERROR_NONE, mJsonRpcHandler.Exists(_T("getProtocolVersion")));
 
@@ -610,6 +611,29 @@ TEST_F(XCastTest, getProtocolVersion)
                 }));
     EXPECT_EQ(Core::ERROR_NONE, mJsonRpcHandler.Invoke(connection, _T("getProtocolVersion"), _T("{}"), response));
     EXPECT_EQ(response, string("{\"version\":\"test\",\"success\":true}"));
+
+    if (Core::ERROR_NONE == status)
+    {
+        releaseResources();
+    }
+}
+
+TEST_F(XCastTest, getAdditionalDataUrl)
+{
+    Core::hresult status = createResources();
+
+    EXPECT_CALL(*p_gdialserviceImplMock, GetAdditionalDataUrl("Youtube", ::testing::_))
+        .WillOnce(::testing::Invoke(
+            [](const std::string&, std::string& additionalDataUrl) {
+                additionalDataUrl = "http%3A%2F%2Flocalhost%3A56889%2Fyoutube%2Fdial_data";
+                return GDIAL_SERVICE_ERROR_NONE;
+            }));
+    EXPECT_EQ(Core::ERROR_NONE, mJsonRpcHandler.Invoke(connection, _T("getAdditionalDataUrl"), _T("{\"applicationName\":\"Youtube\"}"), response));
+    EXPECT_EQ(response, string("{\"additionalDataUrl\":\"http%3A%2F%2Flocalhost%3A56889%2Fyoutube%2Fdial_data\",\"success\":true}"));
+
+    EXPECT_CALL(*p_gdialserviceImplMock, GetAdditionalDataUrl("NotRegistered", ::testing::_))
+        .WillOnce(::testing::Return(GDIAL_SERVICE_ERROR_FAILED));
+    EXPECT_NE(Core::ERROR_NONE, mJsonRpcHandler.Invoke(connection, _T("getAdditionalDataUrl"), _T("{\"applicationName\":\"NotRegistered\"}"), response));
 
     if (Core::ERROR_NONE == status)
     {

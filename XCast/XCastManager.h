@@ -73,6 +73,7 @@ public:
 
     void registerApplications (std::vector<DynamicAppConfig*>& appConfigList);
     string  getProtocolVersion(void);
+    bool getAdditionalDataUrl(const string& applicationName, string& additionalDataUrl);
     void setNetworkStandbyMode(bool nwStandbymode);
 
     int setManufacturerName( string manufacturer);
