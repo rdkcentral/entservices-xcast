@@ -1,5 +1,11 @@
 startmode = "@PLUGIN_SYSTEMMONITOR_STARTMODE@"
 callsign    = "org.rdk.SystemMonitor"
 
+configuration = JSON()
+rootobject = JSON()
+rootobject.add("mode", "@PLUGIN_SYSTEMMONITOR_MODE@")
+rootobject.add("locator", "lib@PLUGIN_IMPLEMENTATION@.so")
+configuration.add("root", rootobject)
+
 
 
