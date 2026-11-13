@@ -28,13 +28,13 @@
         SERVICE_REGISTRATION(SystemMonitorImplementation, 1, 0);
  
         SystemMonitorImplementation::SystemMonitorImplementation(): 
+        _adminLock(),
         _service(nullptr),
-	    _notificationSinks(),
-	    _cpuHighThreshold(90.0),
-	    _memoryHighUsageThreshold(90),
-	    _adminLock(),
+        _cpuHighThreshold(90.0),
+        _memoryHighUsageThreshold(90),
         _cpuHigh(false),
-        _memoryLow(false)
+        _memoryLow(false),
+        _notificationSinks()
         {
             LOGINFO("SystemMonitorImplementation constructed");
         }

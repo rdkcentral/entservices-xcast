@@ -58,8 +58,8 @@ namespace WPEFramework{
 
      public:
 
-	virtual Core::hresult Register(Exchange::ISystemMonitor::INotification* notification) = 0;
-   	virtual Core::hresult Unregister(Exchange::ISystemMonitor::INotification* notification) = 0;
+    Core::hresult Register(Exchange::ISystemMonitor::INotification* notification) override;
+    Core::hresult Unregister(Exchange::ISystemMonitor::INotification* notification) override;
 
 // ISystemMonitor APIs
     Core::hresult Uptime(uint64_t& uptime ) const override;
