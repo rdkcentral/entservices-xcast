@@ -51,7 +51,8 @@ namespace Plugin {
 	    PluginHost::JSONRPC(),
 	    _service(nullptr),
 	    _systemMonitor(nullptr),
-	    _systemMonitorNotification(this)
+	    _systemMonitorNotification(this),
+        _notificationRegistered(false),
 
     {
 	    SYSLOG(Logging::Startup, (_T("SystemMonitor Constructor")));
@@ -81,6 +82,7 @@ namespace Plugin {
             }
                 // Subscribe to COM events from the implementation
                 _systemMonitor->Register(&_systemMonitorNotification);
+                _notificationRegistered = true;
                 // Invoking Plugin API register to wpeframework
                 Exchange::JSystemMonitor::Register(*this, _systemMonitor );
                 LOGINFO("SystemMonitor::Initialize: out-of-process impl ready, connectionId=%u",
@@ -112,7 +114,11 @@ namespace Plugin {
             _service->Unregister(&_systemMonitorNotification);
         }
         if (_systemMonitor != nullptr) {
-            _systemMonitor->Unregister(&_systemMonitorNotification);
+            if (_notificationRegistered) {
+                _systemMonitor->Unregister(&_systemMonitorNotification);
+                _notificationRegistered = false;
+            }
+         
             Exchange::JSystemMonitor::Unregister(*this);
             // Stop processing:
             RPC::IRemoteConnection* connection = service->RemoteConnection(_connectionId);

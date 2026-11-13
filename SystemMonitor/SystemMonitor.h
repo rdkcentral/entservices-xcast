@@ -86,6 +86,7 @@ namespace Plugin {
     uint32_t _connectionId{};
     Exchange::ISystemMonitor* _systemMonitor{};
     Core::Sink<Notification> _systemMonitorNotification;
+    bool   _notificationRegistered{false};
     public:
         SystemMonitor(const SystemMonitor&) = delete;
         SystemMonitor& operator=(const SystemMonitor&) = delete;

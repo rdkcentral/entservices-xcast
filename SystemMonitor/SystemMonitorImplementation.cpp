@@ -68,11 +68,12 @@ Core::hresult SystemMonitorImplementation::Register(Exchange::ISystemMonitor::IN
 		    notification->AddRef();
 
 		    _notificationSinks.push_back(notification);
+            LOGINFO("SystemMonitor notification client added");
 
 		    TRACE(Trace::Information,(_T("SystemMonitor notification client registered")));
 	    } else {
 		    result = Core::ERROR_ALREADY_CONNECTED;
-
+            LOGINFO("SystemMonitor notification client already registered");
 		    TRACE(Trace::Warning,(_T("SystemMonitor client already registered")));
 	    }
 
@@ -100,19 +101,21 @@ Core::hresult SystemMonitorImplementation::Register(Exchange::ISystemMonitor::IN
 		    removedSink = *index;
 
 		    _notificationSinks.erase(index);
+            LOGINFO("SystemMonitor notification client removed");
 	    }
 
 	    _adminLock.Unlock();
 
 	    if (removedSink == nullptr) {
 		    TRACE(Trace::Warning,(_T("SystemMonitor client was not registered")));
-
+            LOGINFO("SystemMonitor notification client was not registered");
 		    return Core::ERROR_NOT_EXIST;
 	    }
 
 	    removedSink->Release();
 
 	    TRACE(Trace::Information,(_T("SystemMonitor notification client unregistered")));
+            LOGINFO("SystemMonitor notification client unregistered");
 
 	    return Core::ERROR_NONE;
     }
@@ -152,7 +155,7 @@ void SystemMonitorImplementation::NotifyLowMemory(const uint64_t freeMemory, con
         sink->OnLowMemory(
             freeMemory,
             threshold);
-
+            LOGINFO("SystemMonitor low memory notification sent");
         sink->Release();
     }
 }
@@ -183,6 +186,7 @@ void SystemMonitorImplementation::NotifyHighCpuUsage(const double cpuUsage,const
     // Don't hold _adminLock while calling external notification sinks.
     for (auto* sink : sinks) {
         sink->OnHighCpuUsage(cpuUsage, threshold);
+        LOGINFO("SystemMonitor high CPU usage notification sent");
         sink->Release();
     }
 }
@@ -336,6 +340,7 @@ Core::hresult SystemMonitorImplementation::TriggerMemoryNotification()
     _memoryLow = true;
 
     NotifyLowMemory(testFreeMemory,_memoryHighUsageThreshold);
+    LOGINFO("SystemMonitor low memory notification triggered");
 
     return Core::ERROR_NONE;
 }
@@ -347,6 +352,7 @@ Core::hresult SystemMonitorImplementation::TriggerCpuNotification()
     _cpuHigh = true;
 
     NotifyHighCpuUsage(testCpuUsage,_cpuHighThreshold);
+    LOGINFO("SystemMonitor high CPU usage notification triggered");
 
     return Core::ERROR_NONE;
 }
