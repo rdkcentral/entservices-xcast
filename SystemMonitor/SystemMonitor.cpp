@@ -52,7 +52,7 @@ namespace Plugin {
 	    _service(nullptr),
 	    _systemMonitor(nullptr),
 	    _systemMonitorNotification(this),
-        _notificationRegistered(false),
+        _notificationRegistered(false)
 
     {
 	    SYSLOG(Logging::Startup, (_T("SystemMonitor Constructor")));
