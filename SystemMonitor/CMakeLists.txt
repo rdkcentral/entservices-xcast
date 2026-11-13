@@ -94,6 +94,7 @@ target_link_libraries(${MODULE_NAME}
 
 add_library(${PLUGIN_IMPLEMENTATION} SHARED
     SystemMonitorImplementation.cpp
+    Module.cpp
 )
 
 set_target_properties(${PLUGIN_IMPLEMENTATION}
@@ -134,7 +135,7 @@ install(
 
 install(
     TARGETS ${PLUGIN_IMPLEMENTATION}
-    DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    DESTINATION ${CMAKE_INSTALL_LIBDIR}/${STORAGE_DIRECTORY}/plugins
     COMPONENT ${NAMESPACE}_Runtime
 )
 

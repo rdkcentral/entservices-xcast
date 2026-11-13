@@ -30,6 +30,6 @@ include(CmakeHelperFunctions)
 
 option(PLUGIN_SYSTEMMONITOR "Enable SystemMonitor plugin" ON)
 
-if(PLUGIN_RESOURCEMONITOR)
+if(PLUGIN_SYSTEMMONITOR)
     add_subdirectory(SystemMonitor)
 endif()
