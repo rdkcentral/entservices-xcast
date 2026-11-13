@@ -23,7 +23,6 @@
 #include <interfaces/json/JsonData_SystemMonitor.h>
 #include <interfaces/json/JSystemMonitor.h>
 #include "interfaces/ISystemMonitor.h"
-#include <interfaces/json/JSystemMonitor.h>
 #include <interfaces/IConfiguration.h>
 #include "UtilsLogging.h"
 #include "tracing/Logging.h"
@@ -36,8 +35,7 @@ namespace WPEFramework  {
 namespace Plugin {
 
     class SystemMonitor : public PluginHost::IPlugin, 
-                          public PluginHost::JSONRPC, 
-                          public Exchange::ISystemMonitor 
+                          public PluginHost::JSONRPC
     {
          private:
         class Notification : public RPC::IRemoteConnection::INotification,
@@ -48,7 +46,7 @@ namespace Plugin {
                 Notification(const Notification&) = delete;
                 Notification& operator=(const Notification&) = delete;
             public:     
-                explicit Notification(ISystemMonitor* parent)
+                explicit Notification(SystemMonitor* parent)
                     : _parent(parent)
                 {
                 }
@@ -58,7 +56,7 @@ namespace Plugin {
                   }
                 void Deactivated(RPC::IRemoteConnection* connection)  
                 {
-                    // Handle deactivation
+                    _parent->Deactivated(connection);
                 }
                      BEGIN_INTERFACE_MAP(Notification)
                     INTERFACE_ENTRY(Exchange::ISystemMonitor::INotification)
@@ -79,7 +77,7 @@ namespace Plugin {
                 }
                  
             private:
-            ISystemMonitor* _parent;
+            SystemMonitor* _parent;
 
         }; // class Notification
 
@@ -110,8 +108,6 @@ namespace Plugin {
         void Deinitialize(PluginHost::IShell* service) override;
         string Information() const override;
         void Deactivated(RPC::IRemoteConnection* connection);
-        Core::hresult TriggerMemoryNotification() override;
-        Core::hresult TriggerCpuNotification() override;
 
     };  
 

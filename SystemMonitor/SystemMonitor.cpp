@@ -49,7 +49,6 @@ namespace Plugin {
     SystemMonitor::SystemMonitor(): 
 	    PluginHost::IPlugin(),
 	    PluginHost::JSONRPC(),
-	    Exchange::ISystemMonitor(),
 	    _service(nullptr),
 	    _systemMonitor(nullptr),
 	    _systemMonitorNotification(this)
@@ -69,7 +68,6 @@ namespace Plugin {
 
 	    _service = service;
 	    _service->AddRef();
-	    Exchange::JSystemMonitor::Register(*this, this);
         _service->Register(&_systemMonitorNotification);
 
         _systemMonitor = _service->Root<Exchange::ISystemMonitor>(_connectionId, 5000, _T("SystemMonitorImplementation"));
@@ -166,29 +164,5 @@ namespace Plugin {
         }
               
 
-Core::hresult SystemMonitor::TriggerMemoryNotification()
-{
-    constexpr uint64_t testTotalMemory = 2101071872ULL;
-
-    constexpr uint64_t testFreeMemory = 65122304ULL;
-
-   // _memoryLow = true;
-
-    //NotifyLowMemory(testFreeMemory,_memoryHighUsageThreshold);
-
-    return Core::ERROR_NONE;
-}
-
-Core::hresult SystemMonitor::TriggerCpuNotification()
-{
-    constexpr double testCpuUsage = 95.0;
-
-    //_cpuHigh = true;
-
-    //NotifyHighCpuUsage(testCpuUsage,_cpuHighThreshold);
- 
-    return Core::ERROR_NONE;
-}
-    
 } // Plugin
 } // Thunder
