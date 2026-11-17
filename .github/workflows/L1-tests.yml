@@ -129,7 +129,7 @@ jobs:
         with:
           repository: rdkcentral/networkmanager
           path: networkmanager
-          ref: main
+          ref: v3.0.0
 
       - name: Checkout entservices-xcast
         if: ${{ inputs.caller_source == 'local' }}
