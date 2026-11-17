@@ -58,6 +58,7 @@ target_include_directories(
     ${MODULE_NAME}
     PRIVATE
         ${CMAKE_CURRENT_LIST_DIR}
+        ${CMAKE_SYSROOT}/usr/include/wpeframework/helpers
 )
 
 target_link_libraries(
