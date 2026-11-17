@@ -20,6 +20,9 @@
  #pragma once
 
 #include "Module.h"
+#include "UtilsLogging.h"
+#include "tracing/Logging.h"
+
 
 namespace WPEFramework {
 namespace Plugin {
@@ -79,6 +82,10 @@ public:
         PluginHost::IShell* service) override;
 
     string Information() const override;
+
+    BEGIN_INTERFACE_MAP(SystemMonitorSubscriber)
+        INTERFACE_ENTRY(PluginHost::IPlugin)
+    END_INTERFACE_MAP
 
 private:
 
