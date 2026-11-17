@@ -19,11 +19,12 @@
 
 #pragma once
 #ifndef MODULE_NAME
-#define MODULE_NAME Plugin_ProcessWatcher
+#define MODULE_NAME Plugin_SystemMonitorSubscriber
 #endif
 
 #include <plugins/plugins.h>
 #include <tracing/tracing.h>
+#include <interfaces/ISystemMonitor.h>
 
 #undef EXTERNAL
 #define EXTERNAL
