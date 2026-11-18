@@ -29,7 +29,6 @@ cmake -G Ninja -S "$GITHUB_WORKSPACE" -B build/entservices-xcast \
 -I ${GITHUB_WORKSPACE}/entservices-testframework/Tests \
 -I ${GITHUB_WORKSPACE}/entservices-testframework/Tests/mocks \
 -I ${GITHUB_WORKSPACE}/entservices-testframework/Tests/mocks/thunder \
--I ${GITHUB_WORKSPACE}/entservices-testframework/Tests/mocks/devicesettings \
 -I ${GITHUB_WORKSPACE}/Thunder/Source \
 -I ${GITHUB_WORKSPACE}/Thunder/Source/core \
 -I /usr/include/libdrm \
