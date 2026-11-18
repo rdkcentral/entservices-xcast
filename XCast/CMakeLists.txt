@@ -24,7 +24,7 @@ set(PLUGIN_XCAST_STARTUPORDER "" CACHE STRING "To configure startup order of XCa
 set(PLUGIN_XCAST_MODE "Local" CACHE STRING "Controls if the plugin should run in its own process, in process or remote")
 
 find_package(${NAMESPACE}Plugins REQUIRED)
-find_package(${NAMESPACE}Helpers REQUIRED)
+find_package(${NAMESPACE}Helpers CONFIG REQUIRED)
 find_package(RFC)
 find_package(GLIB REQUIRED)
 find_package(WPEFrameworkSecurityUtil)
