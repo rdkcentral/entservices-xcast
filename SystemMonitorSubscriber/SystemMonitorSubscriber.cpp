@@ -59,7 +59,7 @@ const string SystemMonitorSubscriber::Initialize(
      */
     _systemMonitor =
         service->QueryInterfaceByCallsign<Exchange::ISystemMonitor>(
-            _T("SystemMonitor"));
+            _T("org.rdk.SystemMonitor"));
 
     if (_systemMonitor == nullptr) {
 
