@@ -1051,7 +1051,8 @@ namespace WPEFramework
             }
 
             uint32_t rc = Core::ERROR_GENERAL;
-            rc = _networkManagerPlugin->GetPrimaryInterface(interface);
+            Exchange::INetworkManager::InterfaceType interfaceType = Exchange::INetworkManager::INTERFACE_TYPE_UNKNOWN;
+            rc = _networkManagerPlugin->GetPrimaryInterface(interface, interfaceType);
 
             if (Core::ERROR_NONE != rc)
             {
