@@ -565,6 +565,19 @@ void XCastManager::setNetworkStandbyMode(bool nwStandbymode)
     }
 }
 
+bool XCastManager::getAdditionalDataUrl(const string& applicationName, string& additionalDataUrl)
+{
+    lock_guard<recursive_mutex> lock(m_mutexSync);
+    if (gdialCastObj == nullptr)
+    {
+        LOGERR("gdialCastObj is NULL");
+        additionalDataUrl.clear();
+        return false;
+    }
+
+    return gdialCastObj->GetAdditionalDataUrl(applicationName, additionalDataUrl) == GDIAL_SERVICE_ERROR_NONE;
+}
+
 XCastManager * XCastManager::getInstance()
 {
     LOGINFO("Entering ...");

@@ -658,38 +658,35 @@ namespace WPEFramework
             }
         }
 
-        void XCastImplementation::notifyAppActions(const string& appName, const string& intent,
-            const string& dialPayload, const string& additionalDataUrl)
+        void XCastImplementation::notifyAppActions(const string& appId, const string& appContentData)
         {
-            LOGWARN("AppActions notifyAppActions appName: %s", appName.c_str());
+            LOGWARN("AppActions notifyAppActions appId: %s", appId.c_str());
             if (_appActionsPlugin)
             {
-                string actionIntent = "";
-                JsonObject context;
+                string actionIntent;
+                JsonObject actionRequest;
+                JsonObject actionRequestData;
                 JsonObject action;
                 JsonObject data;
-                context["source"] = "DIAL";
-                action["action"] = intent;
-                action["context"] = context;
-
-                if (intent == "launch")
-                {
-                    data["dialPayload"] = dialPayload;
-                    data["additionalDataUrl"] = additionalDataUrl;
-                }
+                data["appContentData"] = appContentData;
+                action["action"] = "launch";
                 action["data"] = data;
-                action.ToString(actionIntent);
+                actionRequestData["appId"] = appId;
+                actionRequestData["intent"] = action;
+                actionRequest["actionType"] = "org.rdk.app.launch";
+                actionRequest["actionData"] = actionRequestData;
+                actionRequest.ToString(actionIntent);
 
-                Core::hresult result = _appActionsPlugin->ActionStart("DIAL", actionIntent, appName);
+                Core::hresult result = _appActionsPlugin->ActionStart("DIAL", actionIntent, appId);
                 if (Core::ERROR_NONE != result)
                 {
                     LOGERR("AppActions::ActionStart failed for app[%s] intent[%s], Error[%x]",
-                        appName.c_str(), actionIntent.c_str(), result);
+                        appId.c_str(), actionIntent.c_str(), result);
                 }
             }
             else
             {
-                LOGWARN("AppActions plugin not available, skipping ActionStart for app[%s]", appName.c_str());
+                LOGWARN("AppActions plugin not available, skipping ActionStart for app[%s]", appId.c_str());
             }
         }
 
@@ -937,7 +934,7 @@ namespace WPEFramework
         {
             LOGINFO("[EVENT] appName[%s], strPayLoad[%s], strQuery[%s], strAddDataUrl[%s]",
                     appName.c_str(),strPayLoad.c_str(),strQuery.c_str(),strAddDataUrl.c_str());
-            notifyAppActions(appName, "launch", strPayLoad, strAddDataUrl);
+            notifyAppActions(appName, strPayLoad);
             JsonObject params;
             params["appName"]  = appName.c_str();
             params["strPayLoad"]  = strPayLoad.c_str();
@@ -949,7 +946,7 @@ namespace WPEFramework
         void XCastImplementation::onXcastApplicationLaunchRequest(string appName, string parameter)
         {
             LOGINFO("[EVENT] appName[%s], parameter[%s]",appName.c_str(),parameter.c_str());
-            notifyAppActions(appName, "launch", parameter);
+            notifyAppActions(appName, parameter);
             JsonObject params;
             params["appName"]  = appName.c_str();
             params["parameter"]  = parameter.c_str();
@@ -959,7 +956,18 @@ namespace WPEFramework
         void XCastImplementation::onXcastApplicationStopRequest(string appName, string appId)
         {
             LOGINFO("[EVENT] appName[%s], appId[%s]",appName.c_str(),appId.c_str());
-            notifyAppActions(appName, "stop");
+            if (_appManagerPlugin)
+            {
+                Core::hresult result = _appManagerPlugin->KillApp(appId);
+                if (Core::ERROR_NONE != result)
+                {
+                    LOGERR("IAppManager::KillApp failed for app[%s], Error[%x]", appId.c_str(), result);
+                }
+            }
+            else
+            {
+                LOGWARN("AppManager plugin not available, skipping KillApp for app[%s]", appId.c_str());
+            }
             JsonObject params;
             params["appName"]  = appName.c_str();
             params["appId"]  = appId.c_str();
@@ -969,7 +977,18 @@ namespace WPEFramework
         void XCastImplementation::onXcastApplicationHideRequest(string appName, string appId)
         {
             LOGINFO("[EVENT] appName[%s], appId[%s]",appName.c_str(),appId.c_str());
-            notifyAppActions(appName, "hide");
+            if (_appManagerPlugin)
+            {
+                Core::hresult result = _appManagerPlugin->CloseApp(appId);
+                if (Core::ERROR_NONE != result)
+                {
+                    LOGERR("IAppManager::CloseApp failed for app[%s], Error[%x]", appId.c_str(), result);
+                }
+            }
+            else
+            {
+                LOGWARN("AppManager plugin not available, skipping CloseApp for app[%s]", appId.c_str());
+            }
             JsonObject params;
             params["appName"]  = appName.c_str();
             params["appId"]  = appId.c_str();
@@ -979,7 +998,7 @@ namespace WPEFramework
         void XCastImplementation::onXcastApplicationResumeRequest(string appName, string appId)
         {
             LOGINFO("[EVENT] appName[%s], appId[%s]",appName.c_str(),appId.c_str());
-            notifyAppActions(appName, "resume");
+            notifyAppActions(appName, "");
             JsonObject params;
             params["appName"]  = appName.c_str();
             params["appId"]  = appId.c_str();
@@ -1376,6 +1395,25 @@ namespace WPEFramework
                 LOGINFO("m_xcast_manager is not null");
                 protocolVersion = m_xcast_manager->getProtocolVersion();
                 success = true;
+            }
+            return Core::ERROR_NONE;
+        }
+
+        Core::hresult XCastImplementation::GetAdditionalDataURL(const string& applicationName, string& additionalDataURL, bool& success)
+        {
+            additionalDataURL.clear();
+            success = false;
+            if (nullptr == m_xcast_manager)
+            {
+                LOGERR("m_xcast_manager is NULL");
+            }
+            else
+            {
+                success = m_xcast_manager->getAdditionalDataUrl(applicationName, additionalDataURL);
+                if (!success)
+                {
+                    LOGERR("Additional data URL unavailable for unregistered app[%s]", applicationName.c_str());
+                }
             }
             return Core::ERROR_NONE;
         }
