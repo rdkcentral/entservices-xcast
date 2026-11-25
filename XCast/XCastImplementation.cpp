@@ -1399,9 +1399,9 @@ namespace WPEFramework
             return Core::ERROR_NONE;
         }
 
-        Core::hresult XCastImplementation::GetAdditionalDataUrl(const string& applicationName, string& additionalDataUrl, bool& success)
+        Core::hresult XCastImplementation::GetAdditionalDataURL(const string& applicationName, string& additionalDataURL, bool& success)
         {
-            additionalDataUrl.clear();
+            additionalDataURL.clear();
             success = false;
             if (nullptr == m_xcast_manager)
             {
@@ -1409,7 +1409,7 @@ namespace WPEFramework
                 return Core::ERROR_GENERAL;
             }
 
-            success = m_xcast_manager->getAdditionalDataUrl(applicationName, additionalDataUrl);
+            success = m_xcast_manager->getAdditionalDataUrl(applicationName, additionalDataURL);
             if (!success)
             {
                 LOGERR("Additional data URL unavailable for unregistered app[%s]", applicationName.c_str());
