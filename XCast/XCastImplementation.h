@@ -281,7 +281,7 @@ namespace WPEFramework
             
             Core::hresult SetApplicationState(const string& applicationName, const Exchange::IXCast::State& state, const string& applicationId, const Exchange::IXCast::ErrorCode& error,  Exchange::IXCast::XCastSuccess &success) override;
             Core::hresult GetProtocolVersion(string &protocolVersion, bool &success) override;
-            Core::hresult GetAdditionalDataUrl(const string& applicationName, string& additionalDataUrl, bool& success) override;
+            Core::hresult GetAdditionalDataURL(const string& applicationName, string& additionalDataURL, bool& success) override;
             Core::hresult SetManufacturerName(const string &manufacturername,  Exchange::IXCast::XCastSuccess &success) override;
             Core::hresult GetManufacturerName(string &manufacturername, bool &success) override;
             Core::hresult SetModelName(const string &modelname,  Exchange::IXCast::XCastSuccess &success) override;
