@@ -1406,16 +1406,15 @@ namespace WPEFramework
             if (nullptr == m_xcast_manager)
             {
                 LOGERR("m_xcast_manager is NULL");
-                return Core::ERROR_GENERAL;
             }
-
-            success = m_xcast_manager->getAdditionalDataUrl(applicationName, additionalDataURL);
-            if (!success)
+            else
             {
-                LOGERR("Additional data URL unavailable for unregistered app[%s]", applicationName.c_str());
-                return Core::ERROR_GENERAL;
+                success = m_xcast_manager->getAdditionalDataUrl(applicationName, additionalDataURL);
+                if (!success)
+                {
+                    LOGERR("Additional data URL unavailable for unregistered app[%s]", applicationName.c_str());
+                }
             }
-
             return Core::ERROR_NONE;
         }
 
