@@ -270,10 +270,11 @@ protected:
                     return wdmpStatus;
                 }));
 
-        EXPECT_CALL(*mockNetworkManager, GetPrimaryInterface(::testing::_))
+        EXPECT_CALL(*mockNetworkManager, GetPrimaryInterface(::testing::_, ::testing::_))
             .Times(::testing::AnyNumber())
-            .WillRepeatedly(::testing::Invoke([&](string& interface) -> uint32_t {
+            .WillRepeatedly(::testing::Invoke([&](string& interface, WPEFramework::Exchange::INetworkManager::InterfaceType& type) -> uint32_t {
                     interface = "eth0";
+                    type = WPEFramework::Exchange::INetworkManager::INTERFACE_TYPE_ETHERNET;
                     return Core::ERROR_NONE;
             }));
 
